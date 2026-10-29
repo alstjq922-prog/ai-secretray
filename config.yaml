@@ -1,0 +1,84 @@
+# AI 비서실 설정 — 이 파일만 고치면 비서들의 감시 대상·기준이 바뀝니다.
+
+claude:
+  model: claude-opus-5-5     # 비용을 크게 줄이려면 claude-haiku-5-5 (약 1/40 가격, 품질은 다소 낮음)
+  effort: low                # low | medium | high — 높을수록 꼼꼼하지만 비쌈
+
+keep_days: 3                 # 지난 보고를 며칠간 화면에 남길지
+
+# ─────────────────────────────── 1. SNS 모니터링 비서
+sns:
+  hours: 30                  # 최근 몇 시간 내 보도만 볼지
+  news_words: [페이스북, SNS, 인스타그램]
+  exclude_words: [축제, 기념식, 개막식, 체육대회, 봉사활동, 생일, 축하]
+  # tier 1 = 최우선, 2 = 주요, 3 = 참고
+  # blog_id: 네이버 블로그 주소의 아이디(blog.naver.com/<아이디>) — 있으면 본인 블로그 글도 확인
+  # ※ 2026년 지방선거 이후 바뀐 인물은 직접 수정해 주세요. name이 비어 있으면 건너뜁니다.
+  people:
+    - {name: 이재명, role: 대통령, tier: 1}
+    - {name: 김민석, role: 국무총리, tier: 1}
+    - {name: "", role: 경기도지사, tier: 1}
+    - {name: "", role: 화성시장, tier: 1}
+    - {name: 송옥주, role: "국회의원 화성갑(민주)", tier: 1}
+    - {name: 이준석, role: "국회의원 화성을(개혁신당)", tier: 1}
+    - {name: 권칠승, role: "국회의원 화성병(민주)", tier: 1}
+    - {name: 전용기, role: "국회의원 화성정(민주)", tier: 1}
+    - {name: 정청래, role: 더불어민주당 대표, tier: 1}
+    - {name: 장동혁, role: 국민의힘 대표, tier: 1}
+    - {name: "", role: 서울시장, tier: 2}
+    - {name: "", role: 인천시장, tier: 2}
+    - {name: "", role: 행정안전부 장관, tier: 2}
+    - {name: "", role: 국토교통부 장관, tier: 2}
+
+# ─────────────────────────────── 2. 일정 비서
+schedule:
+  days: 7                    # 오늘부터 며칠 치 일정을 볼지
+  my_role: "나는 화성시 비서실 근무자다."
+
+# ─────────────────────────────── 3. 언론 비서
+press:
+  hours: 30
+  max_reports: 12
+  queries:
+    - 전국 최초 시 도입
+    - 전국 최초 군 시행
+    - 전국 최초 구청
+    - 지자체 최초 도입
+    - 수도권 최초 시행
+    - 경기도 최초 시행
+    - 시 우수사례 선정 정책
+    - 특례시 정책
+  exclude_words: [축제, 개막, 수상자, 인사발령, 부고, 기부, 성금]
+
+# ─────────────────────────────── 4. 정책 비서
+policy:
+  every_days: 7              # 며칠마다 새 정책안을 만들지
+  count: 4
+  hwaseong_profile: |
+    - 인구 약 100만 명 내외, 특례시. 전국에서 가장 젊고 빠르게 성장하는 도시 중 하나
+    - 동탄신도시(젊은 맞벌이·영유아 가구 다수)와 서부 농어촌·공단 지역의 격차
+    - 삼성전자·현대기아차 연구소 등 반도체·자동차 산업 집적, 제조업 비중 큼
+    - 교통(광역철도·GTX, 출퇴근 정체), 보육·교육 수요, 서해안 관광자원(궁평항, 제부도)
+    - 4개 구(만세·효행·병점·동탄) 행정체제
+
+# ─────────────────────────────── 5. 국회·의회 비서
+assembly:
+  age: 22                    # 국회 대수
+  days: 3                    # 최근 며칠 내 상임위/본회의 통과 법안
+  max_bills: 10
+  council_queries: [경기도의회 조례 통과, 경기도의회 화성, 화성시의회]
+
+# ─────────────────────────────── 6. 여론·민원 비서
+opinion:
+  # 화성 지역 민원은 네이버 카페(맘카페 등) 검색으로 찾습니다.
+  local_queries: [화성시 민원, 동탄 민원, 동탄 불편, 화성시청 불만, 봉담 민원, 향남 민원, 화성 교통 불편]
+  # 커뮤니티 인기글: 사이트가 해외 서버(GitHub)를 차단하면 그 사이트만 자동으로 건너뜁니다.
+  # link_pattern: 게시글 링크 주소에 들어 있는 규칙(정규식)
+  communities:
+    민주당 우호 성향:
+      - {name: 클리앙, url: "https://www.clien.net/service/board/park", link_pattern: "/service/board/park/\\d+"}
+      - {name: 딴지일보, url: "https://www.ddanzi.com/free", link_pattern: "/free/\\d+"}
+      - {name: 오늘의유머, url: "https://www.todayhumor.co.kr/board/list.php?table=bestofbest", link_pattern: "table=bestofbest.*no=\\d+"}
+    민주당 비판 성향:
+      - {name: 에펨코리아, url: "https://www.fmkorea.com/index.php?mid=politics", link_pattern: "/\\d{6,}"}
+      - {name: 디시인사이드 정치, url: "https://gall.dcinside.com/mgallery/board/lists/?id=newpolitics", link_pattern: "id=newpolitics.*no=\\d+"}

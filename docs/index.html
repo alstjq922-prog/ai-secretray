@@ -1,0 +1,334 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex, nofollow">
+<title>AI 비서실</title>
+<link rel="preconnect" href="https://cdn.jsdelivr.net">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard.min.css">
+<style>
+:root {
+  --bg: #f5f6f8; --card: #ffffff; --text: #1a1d23; --sub: #5f6672; --line: #e3e6eb;
+  --accent: #2f5bea; --accent-soft: #e8eefe;
+  --hi: #d6336c; --hi-soft: #fde8ef; --mid: #c97a00; --mid-soft: #fff3dc; --lo: #6b7280; --lo-soft: #eef0f3;
+  --dem: #1f5fbf; --dem-soft: #e3edfb; --opp: #c2410c; --opp-soft: #fdebe1;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0f1115; --card: #181b21; --text: #e8eaee; --sub: #9aa1ad; --line: #2a2f38;
+    --accent: #7c9cff; --accent-soft: #1f2840;
+    --hi: #ff6b9a; --hi-soft: #3a1a26; --mid: #f0b44c; --mid-soft: #3a2c12; --lo: #9aa1ad; --lo-soft: #252a33;
+    --dem: #78a6ff; --dem-soft: #17253f; --opp: #ff9a62; --opp-soft: #3a2116;
+  }
+}
+* { box-sizing: border-box; }
+[hidden] { display: none !important; }
+body { margin: 0; background: var(--bg); color: var(--text); font: 15px/1.55 Pretendard, -apple-system, "Malgun Gothic", sans-serif; }
+a { color: inherit; }
+.wrap { max-width: 860px; margin: 0 auto; padding: 0 16px 48px; }
+
+/* 잠금 화면 */
+#lock { min-height: 100vh; display: grid; place-items: center; padding: 16px; }
+#lock form { background: var(--card); border: 1px solid var(--line); border-radius: 16px; padding: 28px; width: 100%; max-width: 340px; }
+#lock h1 { margin: 0 0 4px; font-size: 22px; }
+#lock p { margin: 0 0 18px; color: var(--sub); font-size: 14px; }
+#lock input[type=password] { width: 100%; padding: 12px 14px; border: 1px solid var(--line); border-radius: 10px; background: var(--bg); color: var(--text); font: inherit; }
+#lock label { display: flex; gap: 6px; align-items: center; margin: 12px 0 16px; font-size: 13px; color: var(--sub); }
+#lock button { width: 100%; padding: 12px; border: 0; border-radius: 10px; background: var(--accent); color: #fff; font: inherit; font-weight: 600; cursor: pointer; }
+#err { color: var(--hi); font-size: 13px; min-height: 18px; margin-top: 10px; }
+
+/* 헤더·탭 */
+header { position: sticky; top: 0; z-index: 5; background: var(--bg); padding-top: 16px; }
+.top { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; }
+.top h1 { margin: 0; font-size: 20px; }
+.top small { color: var(--sub); font-size: 12px; }
+nav { display: flex; gap: 6px; overflow-x: auto; padding: 12px 0; scrollbar-width: none; }
+nav::-webkit-scrollbar { display: none; }
+nav button { flex: none; border: 1px solid var(--line); background: var(--card); color: var(--sub); padding: 7px 13px; border-radius: 999px; font: inherit; font-size: 14px; cursor: pointer; }
+nav button.on { background: var(--text); color: var(--bg); border-color: var(--text); }
+nav .n { margin-left: 4px; font-size: 12px; opacity: .7; }
+
+/* 카드 */
+.sec-head { display: flex; justify-content: space-between; align-items: baseline; margin: 18px 0 8px; }
+.sec-head h2 { margin: 0; font-size: 17px; }
+.sec-head span { color: var(--sub); font-size: 12px; }
+.card { background: var(--card); border: 1px solid var(--line); border-radius: 14px; padding: 14px 16px; margin-bottom: 10px; }
+.card.hi { border-left: 4px solid var(--hi); }
+.card h3 { margin: 6px 0 4px; font-size: 15.5px; line-height: 1.4; }
+.card h3 a { text-decoration: none; }
+.card h3 a:hover { text-decoration: underline; }
+.card p { margin: 4px 0; }
+.why { color: var(--sub); font-size: 14px; }
+.why b { color: var(--text); font-weight: 600; }
+.meta { color: var(--sub); font-size: 12px; margin-top: 6px; }
+.tags { display: flex; flex-wrap: wrap; gap: 5px; }
+.tag { font-size: 12px; padding: 2px 8px; border-radius: 6px; background: var(--lo-soft); color: var(--lo); font-weight: 600; }
+.tag.상 { background: var(--hi-soft); color: var(--hi); }
+.tag.중 { background: var(--mid-soft); color: var(--mid); }
+.tag.dem { background: var(--dem-soft); color: var(--dem); }
+.tag.opp { background: var(--opp-soft); color: var(--opp); }
+.tag.acc { background: var(--accent-soft); color: var(--accent); }
+ul.plain { margin: 6px 0 0; padding-left: 18px; }
+ul.plain li { margin: 2px 0; }
+.ex { font-size: 13px; color: var(--sub); }
+.ex a { color: var(--sub); }
+.empty { color: var(--sub); text-align: center; padding: 28px 0; }
+.alert { background: var(--hi-soft); color: var(--hi); border-radius: 10px; padding: 8px 12px; font-size: 13px; margin-bottom: 10px; }
+.filters { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 10px; }
+.filters select { border: 1px solid var(--line); background: var(--card); color: var(--text); border-radius: 8px; padding: 6px 8px; font: inherit; font-size: 13px; }
+.headline { font-size: 16px; font-weight: 600; }
+.time { font-variant-numeric: tabular-nums; color: var(--accent); font-weight: 700; margin-right: 6px; }
+.day { margin: 14px 0 6px; font-size: 13px; color: var(--sub); font-weight: 700; }
+.grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+@media (max-width: 640px) { .grid2 { grid-template-columns: 1fr; } }
+.stat { text-align: center; cursor: pointer; }
+.stat b { display: block; font-size: 24px; }
+.stat span { color: var(--sub); font-size: 13px; }
+.logout { background: none; border: 0; color: var(--sub); font: inherit; font-size: 12px; cursor: pointer; text-decoration: underline; }
+</style>
+</head>
+<body>
+
+<div id="lock">
+  <form id="f">
+    <h1>AI 비서실</h1>
+    <p>비밀번호를 입력하면 보고서가 열립니다.</p>
+    <input type="password" id="pw" placeholder="비밀번호" autocomplete="current-password" autofocus>
+    <label><input type="checkbox" id="remember"> 이 기기에서 기억하기</label>
+    <button>열기</button>
+    <div id="err"></div>
+  </form>
+</div>
+
+<div id="app" class="wrap" hidden>
+  <header>
+    <div class="top">
+      <h1>AI 비서실</h1>
+      <small><span id="upd"></span> · <button class="logout" id="out">잠그기</button></small>
+    </div>
+    <nav id="tabs"></nav>
+  </header>
+  <main id="main"></main>
+</div>
+
+<script>
+const TABS = [
+  ["home", "종합"], ["schedule", "일정"], ["sns", "SNS"], ["press", "언론"],
+  ["policy", "정책"], ["assembly", "국회·의회"], ["opinion", "여론·민원"],
+];
+const store = {
+  get(k) { try { return localStorage.getItem(k); } catch { return null; } },
+  set(k, v) { try { localStorage.setItem(k, v); } catch {} },
+  del(k) { try { localStorage.removeItem(k); } catch {} },
+};
+let DATA = null, tab = store.get("tab") || "home";
+const $ = (s) => document.querySelector(s);
+const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+const b64 = (s) => Uint8Array.from(atob(s), (c) => c.charCodeAt(0));
+
+async function decrypt(env, pw) {
+  const base = await crypto.subtle.importKey("raw", new TextEncoder().encode(pw), "PBKDF2", false, ["deriveKey"]);
+  const key = await crypto.subtle.deriveKey(
+    { name: "PBKDF2", salt: b64(env.salt), iterations: env.iter, hash: "SHA-256" },
+    base, { name: "AES-GCM", length: 256 }, false, ["decrypt"]);
+  const pt = await crypto.subtle.decrypt({ name: "AES-GCM", iv: b64(env.iv) }, key, b64(env.ct));
+  return JSON.parse(new TextDecoder().decode(pt));
+}
+
+async function loadData(pw) {
+  if (new URLSearchParams(location.search).has("demo")) return DEMO;
+  const res = await fetch("data.enc?t=" + Date.now(), { cache: "no-store" });
+  if (!res.ok) throw new Error("아직 보고서가 없습니다. 첫 실행을 기다려 주세요.");
+  try { return await decrypt(await res.json(), pw); }
+  catch { throw new Error("비밀번호가 맞지 않습니다."); }
+}
+
+async function unlock(pw, remember) {
+  $("#err").textContent = "여는 중…";
+  try {
+    DATA = await loadData(pw);
+    if (remember) store.set("pw", pw);
+    $("#lock").hidden = true; $("#app").hidden = false;
+    render();
+  } catch (e) { $("#err").textContent = e.message; store.del("pw"); }
+}
+
+$("#f").onsubmit = (e) => { e.preventDefault(); unlock($("#pw").value, $("#remember").checked); };
+$("#out").onclick = () => { store.del("pw"); location.reload(); };
+
+// ---------- 공통 렌더 도구
+const fmt = (iso) => {
+  if (!iso) return "";
+  const d = new Date(iso);
+  return isNaN(d) ? iso : `${d.getMonth() + 1}/${d.getDate()} ${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
+};
+const pr = (p) => p ? `<span class="tag ${p}">${p}</span>` : "";
+const tag = (t, cls = "") => t ? `<span class="tag ${cls}">${esc(t)}</span>` : "";
+const link = (title, url) => url ? `<a href="${esc(url)}" target="_blank" rel="noopener">${esc(title)}</a>` : esc(title);
+const S = (k) => (DATA.secretaries || {})[k] || {};
+const head = (title, k) => {
+  const s = S(k);
+  return `<div class="sec-head"><h2>${title}</h2><span>${s.updated ? "갱신 " + fmt(s.updated) : ""}</span></div>` +
+    (s.error ? `<div class="alert">최근 수집 실패: ${esc(s.error)}</div>` : "");
+};
+const empty = (msg = "보고할 사안 없음") => `<div class="empty">${msg}</div>`;
+const counts = () => ({
+  schedule: (S("schedule").events || []).length,
+  sns: (S("sns").items || []).length,
+  press: (S("press").items || []).length,
+  policy: (S("policy").items || []).length,
+  assembly: (S("assembly").bills || []).length,
+  opinion: (S("opinion").local || []).length,
+});
+
+function render() {
+  $("#upd").textContent = "최종 " + fmt(DATA.updated);
+  const n = counts();
+  $("#tabs").innerHTML = TABS.map(([k, label]) =>
+    `<button data-k="${k}" class="${k === tab ? "on" : ""}">${label}${n[k] ? `<span class="n">${n[k]}</span>` : ""}</button>`).join("");
+  $("#tabs").querySelectorAll("button").forEach((b) => b.onclick = () => { tab = b.dataset.k; store.set("tab", tab); render(); scrollTo(0, 0); });
+  $("#main").innerHTML = (VIEWS[tab] || VIEWS.home)();
+  $("#main").querySelectorAll("[data-go]").forEach((el) => el.onclick = () => { tab = el.dataset.go; store.set("tab", tab); render(); });
+  $("#main").querySelectorAll("select[data-f]").forEach((el) => el.onchange = () => { FILTER[el.dataset.f] = el.value; render(); });
+}
+
+const FILTER = { region: "", stance: "" };
+const stanceCls = (s) => s === "민주당 입장" ? "dem" : s === "민주당 비판" ? "opp" : "";
+
+// ---------- 비서별 화면
+const VIEWS = {
+  home() {
+    const n = counts();
+    const sc = S("schedule");
+    const urgent = [
+      ...(S("sns").items || []).filter((r) => r.priority === "상").map((r) => ({ ...r, from: "SNS" })),
+      ...(S("press").items || []).filter((r) => r.priority === "상").map((r) => ({ ...r, from: "언론" })),
+      ...(S("opinion").local || []).filter((r) => r.priority === "상").map((r) => ({ ...r, title: r.issue, summary: r.detail, from: "민원" })),
+      ...(S("assembly").bills || []).filter((r) => r.priority === "상").map((r) => ({ ...r, from: "국회" })),
+    ];
+    return `
+      <div class="card"><div class="headline">${esc(sc.headline || "일정 브리핑 없음")}</div>
+        ${(sc.todos || []).length ? `<ul class="plain">${sc.todos.map((t) => `<li>${esc(t)}</li>`).join("")}</ul>` : ""}</div>
+      <div class="sec-head"><h2>꼭 보셔야 할 것</h2><span>중요도 '상'</span></div>
+      ${urgent.length ? urgent.map((r) => `<div class="card hi"><div class="tags">${tag(r.from, "acc")}${r.person ? tag(r.person) : ""}${r.org ? tag(r.org) : ""}${r.stage ? tag(r.stage) : ""}</div>
+        <h3>${link(r.title, r.link)}</h3><p class="why">${esc(r.summary || "")}</p></div>`).join("") : empty("긴급 사안 없음")}
+      <div class="sec-head"><h2>비서별 보고</h2></div>
+      <div class="grid2">${TABS.slice(1).map(([k, l]) => `<div class="card stat" data-go="${k}"><b>${n[k] || 0}</b><span>${l}</span></div>`).join("")}</div>`;
+  },
+
+  schedule() {
+    const s = S("schedule"); const ev = s.events || [];
+    let day = "", out = head("일정 비서", "schedule");
+    out += `<div class="card"><div class="headline">${esc(s.headline || "")}</div>${(s.todos || []).length ? `<ul class="plain">${s.todos.map((t) => `<li>${esc(t)}</li>`).join("")}</ul>` : ""}</div>`;
+    if (!ev.length) return out + empty("향후 일정 없음");
+    for (const e of ev) {
+      const d = new Date(e.start);
+      const label = `${d.getMonth() + 1}월 ${d.getDate()}일 (${"일월화수목금토"[d.getDay()]})`;
+      if (label !== day) { out += `<div class="day">${label}</div>`; day = label; }
+      out += `<div class="card${e.prep?.length ? " hi" : ""}">
+        <div><span class="time">${e.all_day ? "종일" : fmt(e.start).split(" ")[1]}</span><b>${esc(e.title)}</b></div>
+        ${e.location ? `<div class="meta">${esc(e.location)}</div>` : ""}
+        ${e.prep?.length ? `<ul class="plain">${e.prep.map((p) => `<li>${esc(p)}</li>`).join("")}</ul>` : ""}
+        ${e.note ? `<p class="why">⚠ ${esc(e.note)}</p>` : ""}</div>`;
+    }
+    return out;
+  },
+
+  sns() {
+    let items = S("sns").items || [];
+    const opt = (f, vals) => `<select data-f="${f}"><option value="">${f === "region" ? "전체 지역" : "전체 구분"}</option>${vals.map((v) => `<option ${FILTER[f] === v ? "selected" : ""}>${v}</option>`).join("")}</select>`;
+    items = items.filter((r) => (!FILTER.region || r.region === FILTER.region) && (!FILTER.stance || r.stance === FILTER.stance));
+    return head("SNS 모니터링 비서", "sns") +
+      `<div class="filters">${opt("region", ["화성", "경기", "전국"])}${opt("stance", ["민주당 입장", "민주당 비판", "중립"])}</div>` +
+      (items.length ? items.map((r) => `<div class="card${r.priority === "상" ? " hi" : ""}">
+        <div class="tags">${pr(r.priority)}${tag(r.person)}${tag(r.region)}${tag(r.stance, stanceCls(r.stance))}</div>
+        <h3>${esc(r.summary)}</h3>
+        <p class="why"><b>왜:</b> ${esc(r.why)}</p>
+        <div class="meta">${link(r.title, r.link)} · ${esc(r.source || "")} ${fmt(r.date)}</div></div>`).join("") : empty());
+  },
+
+  press() {
+    const items = S("press").items || [];
+    return head("언론 비서", "press") + (items.length ? items.map((r) => `<div class="card${r.priority === "상" ? " hi" : ""}">
+      <div class="tags">${pr(r.priority)}${tag(r.org, "acc")}${tag(r.category)}</div>
+      <h3>${link(r.title, r.link)}</h3>
+      <p>${esc(r.summary)}</p>
+      <p class="why"><b>화성 적용:</b> ${esc(r.hwaseong_point)}</p>
+      <div class="meta">${fmt(r.date)}</div></div>`).join("") : empty());
+  },
+
+  policy() {
+    const s = S("policy"); const items = s.items || [];
+    return head("정책 비서", "policy") +
+      (s.generated ? `<div class="meta" style="margin:-4px 0 10px">이번 정책안 작성: ${fmt(s.generated)} (주 1회)</div>` : "") +
+      (items.length ? items.map((p, i) => `<div class="card">
+        <div class="tags">${tag(p.category, "acc")}${tag("난이도 " + p.difficulty)}</div>
+        <h3>${i + 1}. ${esc(p.title)}</h3>
+        <p class="why"><b>배경:</b> ${esc(p.background)}</p>
+        <p><b>핵심:</b> ${esc(p.idea)}</p>
+        <ul class="plain">${(p.steps || []).map((x) => `<li>${esc(x)}</li>`).join("")}</ul>
+        <div class="meta">참고: ${esc(p.reference)}</div></div>`).join("") : empty("언론 비서가 사례를 모으면 주 1회 정책안을 만듭니다"));
+  },
+
+  assembly() {
+    const s = S("assembly"); const bills = s.bills || [], council = s.council || [];
+    return head("국회·의회 비서", "assembly") +
+      (bills.length ? bills.map((b) => `<div class="card${b.priority === "상" ? " hi" : ""}">
+        <div class="tags">${pr(b.priority)}${tag(b.stage, b.stage === "본회의 통과" ? "acc" : "")}${tag(b.committee)}</div>
+        <h3>${link(b.title, b.link)}</h3>
+        <p>${esc(b.summary)}</p>
+        <p class="why"><b>영향:</b> ${esc(b.impact)}</p>
+        <div class="meta">${esc(b.proposer)} · ${esc(b.date)}</div></div>`).join("") : empty("최근 상임위 통과 주요 법안 없음")) +
+      `<div class="sec-head"><h2>경기도의회·화성시의회</h2></div>` +
+      (council.length ? council.map((c) => `<div class="card"><h3>${link(c.title, c.link)}</h3><p class="why">${esc(c.summary)}</p><div class="meta">${fmt(c.date)}</div></div>`).join("") : empty());
+  },
+
+  opinion() {
+    const s = S("opinion"); const camps = s.camps || [], local = s.local || [];
+    const ex = (xs) => (xs || []).length ? `<div class="ex">${xs.map((x) => `· ${link(x.title, x.link)} (${esc(x.source)})`).join("<br>")}</div>` : "";
+    return head("여론·민원 비서", "opinion") +
+      `<div class="sec-head"><h2>화성 지역 민원</h2></div>` +
+      (local.length ? local.map((l) => `<div class="card${l.priority === "상" ? " hi" : ""}">
+        <div class="tags">${pr(l.priority)}</div><h3>${esc(l.issue)}</h3><p>${esc(l.detail)}</p>
+        <p class="why"><b>대응:</b> ${esc(l.action)}</p>${ex(l.examples)}</div>`).join("") : empty("특이 민원 없음")) +
+      `<div class="sec-head"><h2>진영별 여론</h2></div>` +
+      (camps.length ? `<div class="grid2">${camps.map((c) => `<div class="card">
+        <div class="tags">${tag(c.camp, c.camp.includes("비판") ? "opp" : "dem")}</div>
+        <p class="why" style="margin-top:8px">${esc(c.mood)}</p>
+        ${c.issues.map((i) => `<p><b>${esc(i.issue)}</b> — ${esc(i.detail)}</p>${ex(i.examples)}`).join("")}</div>`).join("")}</div>` : empty("커뮤니티 수집 결과 없음"));
+  },
+};
+
+// ---------- 화면 확인용 예시 데이터 (주소 끝에 ?demo)
+const DEMO = {
+  updated: new Date().toISOString(),
+  secretaries: {
+    schedule: { updated: new Date().toISOString(), headline: "오늘 오후 시의회 업무보고, 내일 오전 도지사 간담회가 핵심임",
+      todos: ["업무보고 예상 질의 답변서 최종 확인", "간담회 참석자 명단·좌석배치 확정"],
+      events: [
+        { title: "시의회 상임위 업무보고", start: new Date().toISOString(), all_day: false, location: "화성시의회 본회의장", prep: ["예상 질의 답변서", "전년 대비 예산 자료"], note: "" },
+        { title: "도지사 정책 간담회", start: new Date(Date.now() + 864e5).toISOString(), all_day: false, location: "경기도청", prep: ["건의사항 3건 요약본"], note: "이동 50분 소요" }] },
+    sns: { updated: new Date().toISOString(), items: [
+      { priority: "상", person: "예시 의원", region: "화성", stance: "민주당 비판", summary: "예시: 화성 광역교통 대책 지연을 SNS로 비판함", why: "화성 현안이고 지역 언론 확산 가능성 높음", title: "예시 기사 제목", link: "#", source: "예시일보", date: new Date().toISOString() },
+      { priority: "중", person: "예시 대표", region: "전국", stance: "민주당 입장", summary: "예시: 지방재정 확충 법안 처리 촉구 글 게시", why: "지자체 재정에 직접 영향", title: "예시 기사 제목 2", link: "#", source: "예시뉴스", date: new Date().toISOString() }] },
+    press: { updated: new Date().toISOString(), items: [
+      { priority: "상", org: "예시시", category: "교통", title: "예시시, 전국 최초 수요응답형 통근버스 도입", summary: "산업단지 출퇴근 수요에 맞춰 노선을 실시간 조정함", hwaseong_point: "동탄·향남 산단 통근에 적용 검토 가능", link: "#", date: new Date().toISOString() }] },
+    policy: { updated: new Date().toISOString(), generated: new Date().toISOString(), items: [
+      { title: "산단 수요응답형 통근버스", category: "교통", difficulty: "보통", background: "서부 산단 대중교통 공백", idea: "앱 호출형 통근버스를 산단 3곳에서 시범 운영", reference: "예시시 사례", steps: ["수요조사", "시범 노선 운영", "확대"] }] },
+    assembly: { updated: new Date().toISOString(), bills: [
+      { priority: "상", stage: "상임위 통과", committee: "행정안전위원회", title: "지방자치법 일부개정법률안(대안)", summary: "특례시 사무 특례 확대(추정)", impact: "화성시 권한 확대 가능", proposer: "행정안전위원장", date: "2026-10-28", link: "#" }], council: [] },
+    opinion: { updated: new Date().toISOString(),
+      local: [{ priority: "중", issue: "동탄 등굣길 안전 민원", detail: "공사 차량 통행으로 통학로 위험 지적 다수", action: "현장 점검 후 안전요원 배치 검토", examples: [{ title: "예시 카페글", link: "#", source: "예시맘카페" }] }],
+      camps: [
+        { camp: "민주당 우호 성향", mood: "예시: 정부 정책 성과 공유 분위기", issues: [{ issue: "예시 쟁점", detail: "설명", examples: [] }] },
+        { camp: "민주당 비판 성향", mood: "예시: 물가 문제 비판 집중", issues: [{ issue: "예시 쟁점", detail: "설명", examples: [] }] }] },
+  },
+};
+
+const saved = store.get("pw");
+if (new URLSearchParams(location.search).has("demo")) unlock("", false);
+else if (saved) unlock(saved, false);
+</script>
+</body>
+</html>
