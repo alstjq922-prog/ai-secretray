@@ -1,0 +1,50 @@
+name: AI 비서실 보고
+
+on:
+  schedule:
+    # 한국시간 06:30 / 12:00 / 17:30 (GitHub는 UTC 기준, 몇 분 늦게 시작될 수 있음)
+    - cron: "30 21 * * *"
+    - cron: "0 3 * * *"
+    - cron: "30 8 * * *"
+  workflow_dispatch:
+    inputs:
+      only:
+        description: "특정 비서만 실행 (예: sns press). 비우면 전체"
+        required: false
+        default: ""
+
+permissions:
+  contents: write
+
+concurrency:
+  group: secretary
+  cancel-in-progress: false
+
+jobs:
+  report:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - run: pip install -r requirements.txt
+      - name: 비서 실행
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          NAVER_CLIENT_ID: ${{ secrets.NAVER_CLIENT_ID }}
+          NAVER_CLIENT_SECRET: ${{ secrets.NAVER_CLIENT_SECRET }}
+          ASSEMBLY_API_KEY: ${{ secrets.ASSEMBLY_API_KEY }}
+          CALENDAR_ICS_URLS: ${{ secrets.CALENDAR_ICS_URLS }}
+          DASHBOARD_PASSWORD: ${{ secrets.DASHBOARD_PASSWORD }}
+          ONLY: ${{ github.event.inputs.only }}
+        run: python -m secretary.main $ONLY
+      - name: 보고서 저장
+        run: |
+          git config user.name "ai-secretary"
+          git config user.email "ai-secretary@users.noreply.github.com"
+          git add docs/data.enc
+          git diff --cached --quiet || git commit -m "보고서 갱신"
+          git push
