@@ -43,16 +43,18 @@ async def _collect(c, state, seen):
         int(os.environ["TELEGRAM_API_ID"]), os.environ["TELEGRAM_API_HASH"],
     ) as tg:
         dialogs = {d.name: d.entity async for d in tg.iter_dialogs()}
-        for name in names:
+        # 공개 저장소의 실행 기록은 누구나 볼 수 있으므로 방 이름 대신 번호만 출력
+        for i, name in enumerate(names, 1):
             entity = dialogs.get(name)
             if entity is None:
-                print(f"  ! 방을 찾지 못함: {name}")
+                print(f"  ! {i}번 방을 찾지 못함 (TELEGRAM_CHATS의 이름 확인)")
                 continue
             msgs = []
             async for m in tg.iter_messages(entity, limit=c["max_messages"]):
                 if m.date < since:
                     break
                 msgs.append(m)
+            print(f"  {i}번 방 연결 성공: 최근 메시지 {len(msgs)}건")
             replies = Counter(m.reply_to_msg_id for m in msgs if m.reply_to_msg_id)
             last_id = state.get(name, 0)
             for m in msgs:
