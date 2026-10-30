@@ -2,6 +2,5 @@ anthropic>=1.0
 requests>=2.31
 pyyaml>=6.0
 cryptography>=42.0
-icalendar>=5.0
-recurring-ical-events>=2.2
 beautifulsoup4>=4.12
+telethon>=1.36

@@ -1,25 +1,26 @@
-"""AI 비서실 실행기. GitHub Actions가 정해진 시간에 실행한다.
-사용: python -m secretary.main [비서이름 ...]   (이름 생략 시 전체)"""
+"""AI 비서실 실행기. GitHub Actions가 15분마다 실행하고, 주기가 된 비서만 일한다.
+사용: python -m secretary.main [비서이름 ...]   (이름을 주면 주기와 상관없이 그 비서만 실행)"""
 import sys
 import traceback
 from datetime import datetime, timedelta
 
-from . import assembly, opinion, policy, press, schedule, sns, store
+from . import assembly, opinion, policy, press, sns, store, telegram
 from .common import load_config, now
 
 ORDER = {"상": 0, "중": 1, "하": 2}
+JITTER_MIN = 3  # GitHub 실행 시각이 조금씩 밀리는 것을 감안
 
 
 def keep_recent(new, old, days, key="link"):
     """새 보고 + 최근 N일 내 이전 보고를 합친다(필요할 때 들어와도 지난 보고가 남아 있도록)."""
-    cutoff = (now() - timedelta(days=days)).isoformat()
+    cutoff = now() - timedelta(days=days)
     keys = {r.get(key) for r in new}
-    merged = new + [r for r in old if r.get(key) not in keys and (r.get("reported") or "") >= cutoff]
-    return sorted(merged, key=lambda r: (ORDER.get(r.get("priority"), 3), -_ts(r.get("reported"))))
+    kept = [r for r in old if r.get(key) not in keys and _dt(r.get("reported")) >= cutoff]
+    return sorted(new + kept, key=lambda r: (ORDER.get(r.get("priority"), 3), -_dt(r.get("reported")).timestamp()))
 
 
-def _ts(s):
-    return datetime.fromisoformat(s).timestamp() if s else 0
+def _dt(s):
+    return datetime.fromisoformat(s) if s else now() - timedelta(days=3650)
 
 
 def stamp(items):
@@ -33,14 +34,19 @@ def main(only):
     cfg = load_config()
     data = store.load()
     sec = data.setdefault("secretaries", {})
+    sec.pop("schedule", None)  # 없어진 일정 비서의 이전 데이터 삭제
     seen = set(data.get("seen", []))
     errors = {}
 
-    def want(name):
-        return not only or name in only
+    def due(name):
+        if only:
+            return name in only
+        minutes = cfg["intervals"].get(name, 0)
+        last = sec.get(name, {}).get("updated")
+        return not last or now() - _dt(last) >= timedelta(minutes=minutes - JITTER_MIN)
 
     def section(name, fn):
-        if not want(name):
+        if not due(name):
             return
         print(f"▶ {name}")
         try:
@@ -58,6 +64,11 @@ def main(only):
         s = sec.setdefault("sns", {})
         s["items"] = keep_recent(stamp(sns.run(cfg, seen)), s.get("items", []), keep)
 
+    def do_telegram():
+        s = sec.setdefault("telegram", {})
+        tg_state = data.setdefault("telegram_state", {})
+        s["items"] = keep_recent(stamp(telegram.run(cfg, tg_state, seen)), s.get("items", []), keep)
+
     def do_press():
         s = sec.setdefault("press", {})
         s["items"] = keep_recent(stamp(press.run(cfg, seen)), s.get("items", []), keep)
@@ -65,11 +76,10 @@ def main(only):
     def do_policy():
         s = sec.setdefault("policy", {})
         last = s.get("generated")
-        if last and now() - datetime.fromisoformat(last) < timedelta(days=cfg["policy"]["every_days"]) and "policy" not in only:
-            print("  이번 주 정책안 이미 생성 → 건너뜀")
+        if last and now() - _dt(last) < timedelta(days=cfg["policy"]["every_days"]) and "policy" not in only:
             return
-        week_ago = (now() - timedelta(days=7)).isoformat()
-        history = [p for p in sec.get("press", {}).get("items", []) if (p.get("reported") or "") >= week_ago]
+        week_ago = now() - timedelta(days=7)
+        history = [p for p in sec.get("press", {}).get("items", []) if _dt(p.get("reported")) >= week_ago]
         proposals = policy.run(cfg, history)
         if proposals:
             s["items"], s["generated"] = proposals, now().isoformat()
@@ -83,11 +93,9 @@ def main(only):
     def do_opinion():
         sec.setdefault("opinion", {}).update(opinion.run(cfg))
 
-    def do_schedule():
-        sec.setdefault("schedule", {}).update(schedule.run(cfg))
-
-    section("schedule", do_schedule)
     section("sns", do_sns)
+    if telegram.enabled():
+        section("telegram", do_telegram)
     section("press", do_press)
     section("policy", do_policy)
     section("assembly", do_assembly)

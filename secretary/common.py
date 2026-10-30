@@ -117,9 +117,6 @@ def ask_claude(system, user, shape, max_tokens=16000):
         system=system,
         messages=[{"role": "user", "content": user}],
         output_config={"effort": cfg["effort"], "format": {"type": "json_schema", "schema": _schema(shape)}},
-        # 안전 분류기가 거절할 경우 서버가 자동으로 다른 모델로 재시도
-        extra_headers={"anthropic-beta": "server-side-fallback-2026-07-01"},
-        extra_body={"fallbacks": "default"},
     )
     if resp.stop_reason == "refusal":
         raise RuntimeError("Claude가 요청을 거절했습니다")

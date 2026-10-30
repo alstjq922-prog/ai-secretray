@@ -3,7 +3,9 @@
 import base64
 import json
 import os
+import time
 
+import requests
 from cryptography.hazmat.primitives import hashes
 from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
@@ -29,10 +31,29 @@ def save(data):
     DATA_FILE.write_text(json.dumps({"salt": b64(salt), "iv": b64(iv), "ct": b64(ct), "iter": ITERATIONS}))
 
 
+def _read_previous():
+    """이전 보고서를 읽는다. 저장소에 커밋하지 않고 웹페이지로만 배포하므로 게시된 파일에서 가져온다."""
+    if DATA_FILE.exists():
+        return DATA_FILE.read_text()
+    repo = os.environ.get("GITHUB_REPOSITORY")
+    if not repo:
+        return None
+    owner, name = repo.split("/")
+    r = requests.get(
+        f"https://{owner.lower()}.github.io/{name}/data.enc",
+        params={"t": int(time.time())}, headers={"Cache-Control": "no-cache"}, timeout=30,
+    )
+    if r.status_code == 404:  # 첫 실행
+        return None
+    r.raise_for_status()  # 일시 장애 때 빈 상태로 덮어쓰지 않도록 실패 처리
+    return r.text
+
+
 def load():
-    if not DATA_FILE.exists():
+    text = _read_previous()
+    if text is None:
         return {}
-    env = json.loads(DATA_FILE.read_text())
+    env = json.loads(text)
     d = lambda k: base64.b64decode(env[k])
     try:
         pt = AESGCM(_key(os.environ["DASHBOARD_PASSWORD"], d("salt"))).decrypt(d("iv"), d("ct"), None)

@@ -1,10 +1,19 @@
 # AI 비서실 설정 — 이 파일만 고치면 비서들의 감시 대상·기준이 바뀝니다.
 
 claude:
-  model: claude-opus-5-5     # 비용을 크게 줄이려면 claude-haiku-5-5 (약 1/40 가격, 품질은 다소 낮음)
+  model: claude-haiku-5-5    # 품질을 높이려면 claude-opus-5-5 (약 40배 비쌈)
   effort: low                # low | medium | high — 높을수록 꼼꼼하지만 비쌈
 
 keep_days: 3                 # 지난 보고를 며칠간 화면에 남길지
+
+# 비서별 확인 주기(분). 실행은 15분마다 돌고, 주기가 된 비서만 일합니다.
+# 새 글이 없으면 Claude를 부르지 않으므로 비용이 들지 않습니다.
+intervals:
+  sns: 15
+  press: 15
+  telegram: 30
+  opinion: 60
+  assembly: 360
 
 # ─────────────────────────────── 1. SNS 모니터링 비서
 sns:
@@ -30,15 +39,18 @@ sns:
     - {name: "", role: 행정안전부 장관, tier: 2}
     - {name: "", role: 국토교통부 장관, tier: 2}
 
-# ─────────────────────────────── 2. 일정 비서
-schedule:
-  days: 7                    # 오늘부터 며칠 치 일정을 볼지
-  my_role: "나는 화성시 비서실 근무자다."
+# ─────────────────────────────── 2. 정보 비서 (텔레그램 단체방)
+# 방 이름은 공개 저장소에 노출되지 않도록 GitHub 비밀값 TELEGRAM_CHATS에 넣습니다.
+telegram:
+  lookback_hours: 12         # 반응이 늦게 붙는 글까지 보기 위해 최근 몇 시간을 다시 볼지
+  hot_score: 5               # 반응+답글+전달 합계가 이 이상이면 '반응 좋은 글'로 다시 검토
+  min_chars: 15              # 이보다 짧은 메시지는 제외
+  max_messages: 300          # 방별 최대 확인 수
 
 # ─────────────────────────────── 3. 언론 비서
 press:
   hours: 30
-  max_reports: 12
+  max_reports: 3             # 1회 확인당 최대 보고 수 (15분마다 도는 기준)
   queries:
     - 전국 최초 시 도입
     - 전국 최초 군 시행

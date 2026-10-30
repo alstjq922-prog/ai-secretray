@@ -50,5 +50,5 @@ def run(cfg, seen):
         src = pick(items, r["idx"])
         if src:
             reports.append({**r, "title": src["title"], "link": src["link"], "date": src["date"], "source": src["source"]})
-    seen.update(it["link"] for it in items)
+    seen.update(it["link"] for it in items[:150])
     return reports

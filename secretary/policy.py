@@ -14,7 +14,7 @@ SHAPE = {"proposals": [{
 
 def run(cfg, press_history):
     c = cfg["policy"]
-    if not press_history:
+    if len(press_history) < 5:  # 사례가 쌓인 뒤에 작성
         return []
     cases = "\n".join(
         f"- [{p.get('org')}] {p.get('title')} | {p.get('summary')} | 적용점: {p.get('hwaseong_point')}"

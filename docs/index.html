@@ -86,6 +86,19 @@ ul.plain li { margin: 2px 0; }
 .stat b { display: block; font-size: 24px; }
 .stat span { color: var(--sub); font-size: 13px; }
 .logout { background: none; border: 0; color: var(--sub); font: inherit; font-size: 12px; cursor: pointer; text-decoration: underline; }
+.tag.new { background: var(--accent); color: #fff; }
+.btn { border: 0; border-radius: 8px; background: var(--accent); color: #fff; padding: 7px 12px; font: inherit; font-size: 13px; font-weight: 600; cursor: pointer; flex: none; }
+.btn.ghost { background: var(--lo-soft); color: var(--sub); }
+.row { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.row .grow { flex: 1; min-width: 0; }
+.field { width: 100%; padding: 9px 11px; border: 1px solid var(--line); border-radius: 8px; background: var(--bg); color: var(--text); font: inherit; font-size: 14px; }
+textarea.field { min-height: 76px; resize: vertical; }
+.addrow { display: flex; gap: 6px; margin-top: 8px; }
+.addrow select { border: 1px solid var(--line); background: var(--card); color: var(--text); border-radius: 8px; padding: 6px 8px; font: inherit; font-size: 13px; }
+details { margin-bottom: 10px; }
+summary { cursor: pointer; color: var(--sub); font-size: 14px; padding: 6px 0; }
+.line { padding: 7px 0; border-top: 1px solid var(--line); }
+.line:first-of-type { border-top: 0; }
 </style>
 </head>
 <body>
@@ -114,15 +127,20 @@ ul.plain li { margin: 2px 0; }
 
 <script>
 const TABS = [
-  ["home", "종합"], ["schedule", "일정"], ["sns", "SNS"], ["press", "언론"],
-  ["policy", "정책"], ["assembly", "국회·의회"], ["opinion", "여론·민원"],
+  ["home", "종합"], ["sns", "SNS"], ["telegram", "정보"], ["press", "언론"],
+  ["policy", "정책"], ["assembly", "국회·의회"], ["opinion", "여론·민원"], ["people", "인간관계"],
 ];
+const REFRESH_MS = 5 * 60 * 1000;  // 페이지를 열어 둔 동안 새 보고 확인
+const CONTACT_DAYS = { 상: 7, 중: 30, 하: 90 };
 const store = {
   get(k) { try { return localStorage.getItem(k); } catch { return null; } },
   set(k, v) { try { localStorage.setItem(k, v); } catch {} },
   del(k) { try { localStorage.removeItem(k); } catch {} },
 };
-let DATA = null, tab = store.get("tab") || "home";
+let DATA = null, PW = "", tab = store.get("tab") || "home";
+let PEOPLE = { updated: 0, list: [] }, SYNC_MSG = "";
+const LAST_SEEN = new Date(store.get("lastSeen") || 0);
+const isDemo = () => new URLSearchParams(location.search).has("demo") || window.FORCE_DEMO;
 const $ = (s) => document.querySelector(s);
 const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 const b64 = (s) => Uint8Array.from(atob(s), (c) => c.charCodeAt(0));
@@ -136,8 +154,75 @@ async function decrypt(env, pw) {
   return JSON.parse(new TextDecoder().decode(pt));
 }
 
+async function encrypt(obj, pw) {
+  const salt = crypto.getRandomValues(new Uint8Array(16)), iv = crypto.getRandomValues(new Uint8Array(12));
+  const iter = 200000;
+  const base = await crypto.subtle.importKey("raw", new TextEncoder().encode(pw), "PBKDF2", false, ["deriveKey"]);
+  const key = await crypto.subtle.deriveKey({ name: "PBKDF2", salt, iterations: iter, hash: "SHA-256" },
+    base, { name: "AES-GCM", length: 256 }, false, ["encrypt"]);
+  const ct = await crypto.subtle.encrypt({ name: "AES-GCM", iv }, key, new TextEncoder().encode(JSON.stringify(obj)));
+  const s = (b) => btoa(String.fromCharCode(...new Uint8Array(b)));
+  return { salt: s(salt), iv: s(iv), ct: s(ct), iter };
+}
+
+// ---------- 인간관계 명단: 이름은 암호화된 상태로만 저장소에 올라간다
+const repoPath = () => `${location.hostname.split(".")[0]}/${location.pathname.split("/")[1]}`;
+const contactsUrl = () => `https://api.github.com/repos/${repoPath()}/contents/contacts.enc`;
+const ghHeaders = () => ({ Authorization: "Bearer " + store.get("ghToken"), Accept: "application/vnd.github+json" });
+
+async function getRemote() {
+  const res = await fetch(contactsUrl() + "?t=" + Date.now(), { headers: ghHeaders(), cache: "no-store" });
+  if (res.status === 404) return { sha: null, data: null };
+  if (!res.ok) throw new Error("GitHub 응답 " + res.status);
+  const j = await res.json();
+  return { sha: j.sha, data: await decrypt(JSON.parse(atob(j.content.replace(/\n/g, ""))), PW) };
+}
+
+async function pullPeople() {
+  try { PEOPLE = JSON.parse(store.get("people")) || PEOPLE; } catch {}
+  if (!store.get("ghToken") || isDemo()) return;
+  try {
+    const { data } = await getRemote();
+    if (data && data.updated > PEOPLE.updated) { PEOPLE = data; store.set("people", JSON.stringify(PEOPLE)); }
+    SYNC_MSG = "";
+  } catch (e) { SYNC_MSG = "동기화 실패: " + e.message; }
+}
+
+async function savePeople() {
+  PEOPLE.updated = Date.now();
+  store.set("people", JSON.stringify(PEOPLE));
+  render();
+  if (!store.get("ghToken") || isDemo()) return;
+  try {
+    const { sha } = await getRemote();
+    const body = { message: "명단 갱신", content: btoa(JSON.stringify(await encrypt(PEOPLE, PW))) };
+    if (sha) body.sha = sha;
+    const res = await fetch(contactsUrl(), { method: "PUT", headers: ghHeaders(), body: JSON.stringify(body) });
+    if (!res.ok) throw new Error("GitHub 응답 " + res.status);
+    SYNC_MSG = "";
+  } catch (e) { SYNC_MSG = "동기화 실패: " + e.message; render(); }
+}
+
+const today = () => new Date().toLocaleDateString("sv-SE");  // YYYY-MM-DD (현지 시각)
+const daysSince = (d) => Math.floor((new Date(today()) - new Date(d)) / 864e5);
+const overdue = (p) => daysSince(p.last) - CONTACT_DAYS[p.tier];
+const duePeople = () => PEOPLE.list.filter((p) => overdue(p) >= 0).sort((a, b) => overdue(b) / CONTACT_DAYS[b.tier] - overdue(a) / CONTACT_DAYS[a.tier]);
+
+function addPeople(text, tier) {
+  const names = text.split(/[\n,]/).map((s) => s.trim()).filter(Boolean);
+  const have = new Set(PEOPLE.list.map((p) => p.name));
+  for (const name of names) {
+    if (have.has(name)) continue;
+    // 한꺼번에 몰리지 않도록 첫 연락 예정일을 주기 안에서 고르게 분산
+    const ago = Math.floor(Math.random() * CONTACT_DAYS[tier]);
+    const d = new Date(); d.setDate(d.getDate() - ago);
+    PEOPLE.list.push({ id: crypto.randomUUID(), name, tier, last: d.toLocaleDateString("sv-SE") });
+  }
+  savePeople();
+}
+
 async function loadData(pw) {
-  if (new URLSearchParams(location.search).has("demo")) return DEMO;
+  if (isDemo()) return DEMO;
   const res = await fetch("data.enc?t=" + Date.now(), { cache: "no-store" });
   if (!res.ok) throw new Error("아직 보고서가 없습니다. 첫 실행을 기다려 주세요.");
   try { return await decrypt(await res.json(), pw); }
@@ -148,10 +233,28 @@ async function unlock(pw, remember) {
   $("#err").textContent = "여는 중…";
   try {
     DATA = await loadData(pw);
+    PW = pw;
     if (remember) store.set("pw", pw);
+    await pullPeople();
+    if (isDemo() && !PEOPLE.list.length) PEOPLE = DEMO.people;
     $("#lock").hidden = true; $("#app").hidden = false;
     render();
+    store.set("lastSeen", new Date().toISOString());
+    setInterval(refresh, REFRESH_MS);
+    document.addEventListener("visibilitychange", () => { if (!document.hidden) refresh(); });
   } catch (e) { $("#err").textContent = e.message; store.del("pw"); }
+}
+
+async function refresh() {
+  if (document.hidden || isDemo()) return;
+  try {
+    const fresh = await loadData(PW);
+    if (fresh.updated === DATA.updated) return;
+    DATA = fresh;
+    // 입력 중에는 화면을 다시 그리지 않음
+    const el = document.activeElement;
+    if (!["INPUT", "TEXTAREA", "SELECT"].includes(el?.tagName)) render();
+  } catch {}
 }
 
 $("#f").onsubmit = (e) => { e.preventDefault(); unlock($("#pw").value, $("#remember").checked); };
@@ -165,7 +268,8 @@ const fmt = (iso) => {
 };
 const pr = (p) => p ? `<span class="tag ${p}">${p}</span>` : "";
 const tag = (t, cls = "") => t ? `<span class="tag ${cls}">${esc(t)}</span>` : "";
-const link = (title, url) => url ? `<a href="${esc(url)}" target="_blank" rel="noopener">${esc(title)}</a>` : esc(title);
+const link = (title, url) => /^https?:\/\//.test(url || "") ? `<a href="${esc(url)}" target="_blank" rel="noopener">${esc(title)}</a>` : esc(title);
+const fresh = (r) => r.reported && new Date(r.reported) > LAST_SEEN ? `<span class="tag new">NEW</span>` : "";
 const S = (k) => (DATA.secretaries || {})[k] || {};
 const head = (title, k) => {
   const s = S(k);
@@ -174,12 +278,13 @@ const head = (title, k) => {
 };
 const empty = (msg = "보고할 사안 없음") => `<div class="empty">${msg}</div>`;
 const counts = () => ({
-  schedule: (S("schedule").events || []).length,
   sns: (S("sns").items || []).length,
+  telegram: (S("telegram").items || []).length,
   press: (S("press").items || []).length,
   policy: (S("policy").items || []).length,
   assembly: (S("assembly").bills || []).length,
   opinion: (S("opinion").local || []).length,
+  people: duePeople().length,
 });
 
 function render() {
@@ -191,6 +296,24 @@ function render() {
   $("#main").innerHTML = (VIEWS[tab] || VIEWS.home)();
   $("#main").querySelectorAll("[data-go]").forEach((el) => el.onclick = () => { tab = el.dataset.go; store.set("tab", tab); render(); });
   $("#main").querySelectorAll("select[data-f]").forEach((el) => el.onchange = () => { FILTER[el.dataset.f] = el.value; render(); });
+  $("#main").querySelectorAll("[data-done]").forEach((el) => el.onclick = () => {
+    const p = PEOPLE.list.find((x) => x.id === el.dataset.done);
+    p.last = today(); savePeople();
+  });
+  $("#main").querySelectorAll("[data-del]").forEach((el) => el.onclick = () => {
+    const p = PEOPLE.list.find((x) => x.id === el.dataset.del);
+    if (confirm(`${p.name}님을 명단에서 지울까요?`)) { PEOPLE.list = PEOPLE.list.filter((x) => x !== p); savePeople(); }
+  });
+  $("#main").querySelectorAll("select[data-tier]").forEach((el) => el.onchange = () => {
+    PEOPLE.list.find((x) => x.id === el.dataset.tier).tier = el.value; savePeople();
+  });
+  const add = $("#addBtn");
+  if (add) add.onclick = () => { if ($("#addNames").value.trim()) addPeople($("#addNames").value, $("#addTier").value); };
+  const tok = $("#tokBtn");
+  if (tok) tok.onclick = async () => {
+    store.set("ghToken", $("#tok").value.trim());
+    await pullPeople(); await savePeople();
+  };
 }
 
 const FILTER = { region: "", stance: "" };
@@ -200,39 +323,54 @@ const stanceCls = (s) => s === "민주당 입장" ? "dem" : s === "민주당 비
 const VIEWS = {
   home() {
     const n = counts();
-    const sc = S("schedule");
-    const urgent = [
-      ...(S("sns").items || []).filter((r) => r.priority === "상").map((r) => ({ ...r, from: "SNS" })),
-      ...(S("press").items || []).filter((r) => r.priority === "상").map((r) => ({ ...r, from: "언론" })),
-      ...(S("opinion").local || []).filter((r) => r.priority === "상").map((r) => ({ ...r, title: r.issue, summary: r.detail, from: "민원" })),
-      ...(S("assembly").bills || []).filter((r) => r.priority === "상").map((r) => ({ ...r, from: "국회" })),
+    const all = [
+      ...(S("sns").items || []).map((r) => ({ ...r, from: "SNS", go: "sns" })),
+      ...(S("telegram").items || []).map((r) => ({ ...r, title: r.summary, summary: r.why, from: "정보", go: "telegram" })),
+      ...(S("press").items || []).map((r) => ({ ...r, from: "언론", go: "press" })),
+      ...(S("assembly").bills || []).map((r) => ({ ...r, from: "국회", go: "assembly" })),
     ];
+    const feed = all.filter((r) => r.priority === "상" || new Date(r.reported) > LAST_SEEN)
+      .sort((a, b) => new Date(b.reported || 0) - new Date(a.reported || 0)).slice(0, 15);
+    const due = duePeople();
     return `
-      <div class="card"><div class="headline">${esc(sc.headline || "일정 브리핑 없음")}</div>
-        ${(sc.todos || []).length ? `<ul class="plain">${sc.todos.map((t) => `<li>${esc(t)}</li>`).join("")}</ul>` : ""}</div>
-      <div class="sec-head"><h2>꼭 보셔야 할 것</h2><span>중요도 '상'</span></div>
-      ${urgent.length ? urgent.map((r) => `<div class="card hi"><div class="tags">${tag(r.from, "acc")}${r.person ? tag(r.person) : ""}${r.org ? tag(r.org) : ""}${r.stage ? tag(r.stage) : ""}</div>
-        <h3>${link(r.title, r.link)}</h3><p class="why">${esc(r.summary || "")}</p></div>`).join("") : empty("긴급 사안 없음")}
+      ${due.length ? `<div class="card" data-go="people" style="cursor:pointer"><div class="row"><b>이번에 연락할 사람 ${due.length}명</b><span class="why">${esc(due.slice(0, 3).map((p) => p.name).join(", "))}${due.length > 3 ? " 외" : ""}</span></div></div>` : ""}
+      <div class="sec-head"><h2>최신 보고</h2><span>새 보고와 중요도 '상'</span></div>
+      ${feed.length ? feed.map((r) => `<div class="card${r.priority === "상" ? " hi" : ""}"><div class="tags">${fresh(r)}${tag(r.from, "acc")}${pr(r.priority)}${r.person ? tag(r.person) : ""}${r.org ? tag(r.org) : ""}${r.chat ? tag(r.chat) : ""}${r.stage ? tag(r.stage) : ""}</div>
+        <h3>${link(r.title, r.link)}</h3><p class="why">${esc(r.summary || "")}</p><div class="meta">${fmt(r.reported)} 보고</div></div>`).join("") : empty("새 보고 없음")}
       <div class="sec-head"><h2>비서별 보고</h2></div>
       <div class="grid2">${TABS.slice(1).map(([k, l]) => `<div class="card stat" data-go="${k}"><b>${n[k] || 0}</b><span>${l}</span></div>`).join("")}</div>`;
   },
 
-  schedule() {
-    const s = S("schedule"); const ev = s.events || [];
-    let day = "", out = head("일정 비서", "schedule");
-    out += `<div class="card"><div class="headline">${esc(s.headline || "")}</div>${(s.todos || []).length ? `<ul class="plain">${s.todos.map((t) => `<li>${esc(t)}</li>`).join("")}</ul>` : ""}</div>`;
-    if (!ev.length) return out + empty("향후 일정 없음");
-    for (const e of ev) {
-      const d = new Date(e.start);
-      const label = `${d.getMonth() + 1}월 ${d.getDate()}일 (${"일월화수목금토"[d.getDay()]})`;
-      if (label !== day) { out += `<div class="day">${label}</div>`; day = label; }
-      out += `<div class="card${e.prep?.length ? " hi" : ""}">
-        <div><span class="time">${e.all_day ? "종일" : fmt(e.start).split(" ")[1]}</span><b>${esc(e.title)}</b></div>
-        ${e.location ? `<div class="meta">${esc(e.location)}</div>` : ""}
-        ${e.prep?.length ? `<ul class="plain">${e.prep.map((p) => `<li>${esc(p)}</li>`).join("")}</ul>` : ""}
-        ${e.note ? `<p class="why">⚠ ${esc(e.note)}</p>` : ""}</div>`;
-    }
-    return out;
+  telegram() {
+    const items = S("telegram").items || [];
+    return head("정보 비서", "telegram") + (items.length ? items.map((r) => `<div class="card${r.priority === "상" ? " hi" : ""}">
+      <div class="tags">${fresh(r)}${pr(r.priority)}${tag(r.chat, "acc")}${tag(r.category)}</div>
+      <h3>${link(r.summary, r.link)}</h3>
+      <p class="why"><b>왜:</b> ${esc(r.why)}</p>
+      <div class="meta">${esc(r.sender || "")} · 반응 ${r.reactions} · 답글 ${r.replies} · 전달 ${r.forwards} · ${fmt(r.date)}</div></div>`).join("")
+      : empty(S("telegram").updated ? "보고할 사안 없음" : "텔레그램 연결 전입니다"));
+  },
+
+  people() {
+    const due = duePeople();
+    const rows = (t) => PEOPLE.list.filter((p) => p.tier === t).sort((a, b) => a.name.localeCompare(b.name, "ko")).map((p) => `
+      <div class="row line"><div class="grow">${esc(p.name)} <span class="meta">마지막 ${esc(p.last)}</span></div>
+        <select data-tier="${p.id}">${Object.keys(CONTACT_DAYS).map((x) => `<option ${x === p.tier ? "selected" : ""}>${x}</option>`).join("")}</select>
+        <button class="btn ghost" data-del="${p.id}">삭제</button></div>`).join("");
+    return `<div class="sec-head"><h2>인간관계 비서</h2><span>상 1주 · 중 1달 · 하 3개월</span></div>
+      ${SYNC_MSG ? `<div class="alert">${esc(SYNC_MSG)}</div>` : ""}
+      ${due.length ? due.map((p) => `<div class="card"><div class="row"><div class="grow">
+        <div class="tags">${pr(p.tier)}</div><h3>${esc(p.name)}</h3>
+        <div class="meta">마지막 연락 ${daysSince(p.last)}일 전${overdue(p) > 0 ? ` · ${overdue(p)}일 지남` : ""}</div></div>
+        <button class="btn" data-done="${p.id}">연락함</button></div></div>`).join("") : empty(PEOPLE.list.length ? "지금 연락할 사람 없음" : "아래에서 명단을 추가해 주세요")}
+      <div class="sec-head"><h2>명단 추가</h2></div>
+      <div class="card"><textarea class="field" id="addNames" placeholder="이름을 한 줄에 하나씩 또는 쉼표로 구분"></textarea>
+        <div class="addrow"><select id="addTier">${Object.keys(CONTACT_DAYS).map((x) => `<option>${x}</option>`).join("")}</select><button class="btn" id="addBtn">추가</button></div></div>
+      <details><summary>전체 명단 ${PEOPLE.list.length}명</summary><div class="card">
+        ${Object.keys(CONTACT_DAYS).map((t) => `<div class="day">${t}</div>${rows(t) || `<div class="meta">없음</div>`}`).join("")}</div></details>
+      <details><summary>기기 간 동기화 ${store.get("ghToken") ? "(연결됨)" : "(미연결)"}</summary><div class="card">
+        <p class="why">GitHub 토큰을 넣으면 휴대폰과 PC의 명단이 같아집니다. 이름은 암호화되어 저장됩니다. 넣지 않으면 이 기기에만 저장됩니다.</p>
+        <div class="addrow"><input class="field" id="tok" type="password" placeholder="github_pat_..."><button class="btn" id="tokBtn">저장</button></div></div></details>`;
   },
 
   sns() {
@@ -242,7 +380,7 @@ const VIEWS = {
     return head("SNS 모니터링 비서", "sns") +
       `<div class="filters">${opt("region", ["화성", "경기", "전국"])}${opt("stance", ["민주당 입장", "민주당 비판", "중립"])}</div>` +
       (items.length ? items.map((r) => `<div class="card${r.priority === "상" ? " hi" : ""}">
-        <div class="tags">${pr(r.priority)}${tag(r.person)}${tag(r.region)}${tag(r.stance, stanceCls(r.stance))}</div>
+        <div class="tags">${fresh(r)}${pr(r.priority)}${tag(r.person)}${tag(r.region)}${tag(r.stance, stanceCls(r.stance))}</div>
         <h3>${esc(r.summary)}</h3>
         <p class="why"><b>왜:</b> ${esc(r.why)}</p>
         <div class="meta">${link(r.title, r.link)} · ${esc(r.source || "")} ${fmt(r.date)}</div></div>`).join("") : empty());
@@ -251,7 +389,7 @@ const VIEWS = {
   press() {
     const items = S("press").items || [];
     return head("언론 비서", "press") + (items.length ? items.map((r) => `<div class="card${r.priority === "상" ? " hi" : ""}">
-      <div class="tags">${pr(r.priority)}${tag(r.org, "acc")}${tag(r.category)}</div>
+      <div class="tags">${fresh(r)}${pr(r.priority)}${tag(r.org, "acc")}${tag(r.category)}</div>
       <h3>${link(r.title, r.link)}</h3>
       <p>${esc(r.summary)}</p>
       <p class="why"><b>화성 적용:</b> ${esc(r.hwaseong_point)}</p>
@@ -275,7 +413,7 @@ const VIEWS = {
     const s = S("assembly"); const bills = s.bills || [], council = s.council || [];
     return head("국회·의회 비서", "assembly") +
       (bills.length ? bills.map((b) => `<div class="card${b.priority === "상" ? " hi" : ""}">
-        <div class="tags">${pr(b.priority)}${tag(b.stage, b.stage === "본회의 통과" ? "acc" : "")}${tag(b.committee)}</div>
+        <div class="tags">${fresh(b)}${pr(b.priority)}${tag(b.stage, b.stage === "본회의 통과" ? "acc" : "")}${tag(b.committee)}</div>
         <h3>${link(b.title, b.link)}</h3>
         <p>${esc(b.summary)}</p>
         <p class="why"><b>영향:</b> ${esc(b.impact)}</p>
@@ -304,13 +442,10 @@ const VIEWS = {
 const DEMO = {
   updated: new Date().toISOString(),
   secretaries: {
-    schedule: { updated: new Date().toISOString(), headline: "오늘 오후 시의회 업무보고, 내일 오전 도지사 간담회가 핵심임",
-      todos: ["업무보고 예상 질의 답변서 최종 확인", "간담회 참석자 명단·좌석배치 확정"],
-      events: [
-        { title: "시의회 상임위 업무보고", start: new Date().toISOString(), all_day: false, location: "화성시의회 본회의장", prep: ["예상 질의 답변서", "전년 대비 예산 자료"], note: "" },
-        { title: "도지사 정책 간담회", start: new Date(Date.now() + 864e5).toISOString(), all_day: false, location: "경기도청", prep: ["건의사항 3건 요약본"], note: "이동 50분 소요" }] },
+    telegram: { updated: new Date().toISOString(), items: [
+      { priority: "상", chat: "예시 단체방", category: "지역", summary: "예시: 내년도 도비 공모사업 일정이 앞당겨진다는 내용 공유됨", why: "화성시 공모 준비 일정에 영향", sender: "예시 회원", reactions: 12, replies: 8, forwards: 3, link: "tg:1:1", date: new Date().toISOString(), reported: new Date().toISOString() }] },
     sns: { updated: new Date().toISOString(), items: [
-      { priority: "상", person: "예시 의원", region: "화성", stance: "민주당 비판", summary: "예시: 화성 광역교통 대책 지연을 SNS로 비판함", why: "화성 현안이고 지역 언론 확산 가능성 높음", title: "예시 기사 제목", link: "#", source: "예시일보", date: new Date().toISOString() },
+      { reported: new Date().toISOString(), priority: "상", person: "예시 의원", region: "화성", stance: "민주당 비판", summary: "예시: 화성 광역교통 대책 지연을 SNS로 비판함", why: "화성 현안이고 지역 언론 확산 가능성 높음", title: "예시 기사 제목", link: "#", source: "예시일보", date: new Date().toISOString() },
       { priority: "중", person: "예시 대표", region: "전국", stance: "민주당 입장", summary: "예시: 지방재정 확충 법안 처리 촉구 글 게시", why: "지자체 재정에 직접 영향", title: "예시 기사 제목 2", link: "#", source: "예시뉴스", date: new Date().toISOString() }] },
     press: { updated: new Date().toISOString(), items: [
       { priority: "상", org: "예시시", category: "교통", title: "예시시, 전국 최초 수요응답형 통근버스 도입", summary: "산업단지 출퇴근 수요에 맞춰 노선을 실시간 조정함", hwaseong_point: "동탄·향남 산단 통근에 적용 검토 가능", link: "#", date: new Date().toISOString() }] },
@@ -324,6 +459,10 @@ const DEMO = {
         { camp: "민주당 우호 성향", mood: "예시: 정부 정책 성과 공유 분위기", issues: [{ issue: "예시 쟁점", detail: "설명", examples: [] }] },
         { camp: "민주당 비판 성향", mood: "예시: 물가 문제 비판 집중", issues: [{ issue: "예시 쟁점", detail: "설명", examples: [] }] }] },
   },
+  people: { updated: 0, list: [
+    { id: "a", name: "예시 상", tier: "상", last: new Date(Date.now() - 9 * 864e5).toLocaleDateString("sv-SE") },
+    { id: "b", name: "예시 중", tier: "중", last: new Date(Date.now() - 31 * 864e5).toLocaleDateString("sv-SE") },
+    { id: "c", name: "예시 하", tier: "하", last: new Date(Date.now() - 20 * 864e5).toLocaleDateString("sv-SE") }] },
 };
 
 const saved = store.get("pw");
