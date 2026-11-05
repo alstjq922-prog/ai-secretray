@@ -33,7 +33,7 @@ def clean(text):
 
 def naver_search(kind, query, display=50, sort="date"):
     """kind: news | blog | cafearticle"""
-        r = requests.get(
+    r = requests.get(
         f"https://naverapihub.apigw.ntruss.com/search/v1/{kind}",
         params={"query": query, "display": display, "sort": sort, "format": "json"},
         headers={
