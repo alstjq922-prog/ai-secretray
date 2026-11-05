@@ -33,12 +33,12 @@ def clean(text):
 
 def naver_search(kind, query, display=50, sort="date"):
     """kind: news | blog | cafearticle"""
-    r = requests.get(
-        f"https://openapi.naver.com/v1/search/{kind}.json",
-        params={"query": query, "display": display, "sort": sort},
+        r = requests.get(
+        f"https://naverapihub.apigw.ntruss.com/search/v1/{kind}",
+        params={"query": query, "display": display, "sort": sort, "format": "json"},
         headers={
-            "X-Naver-Client-Id": os.environ["NAVER_CLIENT_ID"],
-            "X-Naver-Client-Secret": os.environ["NAVER_CLIENT_SECRET"],
+            "X-NCP-APIGW-API-KEY-ID": os.environ["NAVER_CLIENT_ID"].strip(),
+            "X-NCP-APIGW-API-KEY": os.environ["NAVER_CLIENT_SECRET"].strip(),
         },
         timeout=15,
     )
