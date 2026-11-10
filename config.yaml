@@ -184,6 +184,7 @@ briefing:
 # RSS를 먼저 쓰고, 안 되면 기사 목록 페이지(list_url)에서 link_pattern에 맞는 링크를 기사로 봅니다.
 newswatch:
   max_per_run: 10            # 한 번에 보낼 최대 기사 수(한꺼번에 많이 올라오면 나머지는 다음 실행 때)
+  summarize: false           # true로 바꾸면 제목·링크에 Claude 2~3문장 요약을 붙임(사이트별로 summarize: true도 가능)
   sites:
     # home만 적으면 홈페이지에서 RSS나 기사 링크 규칙을 스스로 찾습니다(찾은 규칙은 기억해 두고 계속 사용).
     # 직접 지정하려면 rss 또는 list_url + link_pattern(정규식)을 적으세요.
