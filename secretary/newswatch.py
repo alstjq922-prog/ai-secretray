@@ -29,7 +29,11 @@ def get(url):
     """사이트가 잠깐 느리거나 응답이 없을 때를 대비해 최대 3번 시도(5초·10초 쉬고)."""
     for attempt in range(3):
         try:
-            return requests.get(url, headers=UA, timeout=(10, 30))
+            r = requests.get(url, headers=UA, timeout=(10, 30))
+            # 서버가 글자 인코딩을 알려주지 않으면 requests가 서유럽 문자로 읽어 한글이 깨짐 → 내용을 보고 판단
+            if "charset" not in r.headers.get("content-type", "").lower():
+                r.encoding = r.apparent_encoding
+            return r
         except (requests.Timeout, requests.ConnectionError):
             if attempt == 2:
                 raise
@@ -208,7 +212,7 @@ def fetch_body(link):
         if el and len(el.get_text(strip=True)) > 100:
             for bad in el.select("script, style, figure, .ad, iframe"):
                 bad.decompose()
-            return re.sub(r"\s+", " ", el.get_text(" ", strip=True))[:3000]
+            return re.sub(r"\s+", " ", el.get_text(" ", strip=True))[:6000]
     meta = soup.find("meta", property="og:description")
     return (meta.get("content") or "")[:1000] if meta else ""
 
