@@ -4,7 +4,7 @@ import sys
 import traceback
 from datetime import datetime, timedelta
 
-from . import assembly, opinion, policy, press, sns, store, telegram
+from . import assembly, briefing, opinion, policy, press, sns, store, telegram
 from .common import Seen, load_config, now
 
 ORDER = {"상": 0, "중": 1, "하": 2}
@@ -130,6 +130,17 @@ def main(only):
     section("policy", do_policy)
     section("assembly", do_assembly)
     section("opinion", do_opinion)
+
+    # 텔레그램 브리핑은 모든 비서가 일한 뒤에(보낼 차례일 때만). 'briefing'으로 직접 실행하면 지금 바로 시험 전송
+    if briefing.enabled() and (not only or "briefing" in only):
+        print("▶ briefing")
+        try:
+            briefing.run(cfg, data, force="briefing" in only)
+            data.get("briefing", {}).pop("error", None)
+        except Exception as e:
+            traceback.print_exc()
+            data.setdefault("briefing", {})["error"] = f"{type(e).__name__}: {e}"[:300]
+            errors["briefing"] = e
 
     data["seen"] = seen.dump()
     data["updated"] = now().isoformat()
