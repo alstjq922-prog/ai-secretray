@@ -45,7 +45,7 @@ jobs:
           TELEGRAM_BOT_CHAT_ID: ${{ secrets.TELEGRAM_BOT_CHAT_ID }}
           TEST: ${{ github.event.inputs.test }}
         run: python -m secretary.newswatch $TEST
-      - if: steps.watch.outputs.changed == 'true'
+      - if: always() && steps.watch.outputs.changed == 'true'
         uses: actions/cache/save@v4
         with:
           path: newswatch_state.json
