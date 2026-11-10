@@ -236,6 +236,26 @@ def _api(method, **params):
     return j["result"]
 
 
+def bot_hint():
+    """이 토큰의 봇 아이디 일부(예: hs****_bot). 공개 실행 기록에 전체 아이디가 남지 않게 가린다."""
+    try:
+        name = _api("getMe").get("username", "")
+    except Exception:
+        return "기사 알림 봇"
+    return f"@{name[:4]}{'*' * max(len(name) - 10, 2)}{name[-6:]}" if len(name) > 10 else f"@{name}"
+
+
+def _briefing_chat():
+    """브리핑 봇이 이미 찾아 둔 내 텔레그램 번호(암호화 보고서에 저장됨). 없으면 None."""
+    if not os.environ.get("DASHBOARD_PASSWORD"):
+        return None
+    try:
+        from . import store
+        return (store.load().get("briefing") or {}).get("chat_id")
+    except Exception:
+        return None
+
+
 def chat_id(state):
     cid = os.environ.get("NEWS_BOT_CHAT_ID", "").strip() or os.environ.get("TELEGRAM_BOT_CHAT_ID", "").strip() or state.get("chat_id")
     if cid:
@@ -245,7 +265,20 @@ def chat_id(state):
         if chat.get("type") == "private":
             state["chat_id"] = chat["id"]
             return chat["id"]
-    raise RuntimeError("받을 사람을 찾지 못함: 텔레그램에서 기사 알림 봇에게 /start 를 먼저 보내 주세요")
+    cid = _briefing_chat()  # 같은 사람이므로 브리핑 봇의 번호를 씀(이 봇에게 '시작'은 눌러야 보낼 수 있음)
+    if cid:
+        state["chat_id"] = cid
+        return cid
+    raise RuntimeError(f"받을 사람을 찾지 못함: 텔레그램에서 {bot_hint()} 봇에 들어가 '시작'을 눌러 주세요")
+
+
+def send_message(cid, **params):
+    try:
+        return _api("sendMessage", chat_id=cid, **params)
+    except RuntimeError as e:
+        if "Forbidden" in str(e) or "chat not found" in str(e):
+            raise RuntimeError(f"보낼 수 없음: 텔레그램에서 {bot_hint()} 봇에 들어가 '시작'을 눌러 주세요 ({e})") from None
+        raise
 
 
 def _e(s):
@@ -254,7 +287,7 @@ def _e(s):
 
 def send(cid, site, a, summary):
     text = f"📰 <b>{_e(a['title'])}</b>\n\n{_e(summary)}\n\n{_e(a['link'])}"
-    _api("sendMessage", chat_id=cid, text=text, parse_mode="HTML",
+    send_message(cid, text=text, parse_mode="HTML",
          link_preview_options={"is_disabled": False, "url": a["link"], "prefer_small_media": True})
 
 
@@ -276,6 +309,11 @@ def run(test=False):
     before = json.dumps(state, sort_keys=True)
     try:
         _run(state, test)
+    except Exception as e:
+        if test:
+            raise
+        # 정기 실행에서는 오류로 끝내지 않음(매시간 실패 메일 방지). 보내지 못한 기사는 기록하지 않아 다음 실행 때 다시 시도
+        print(f"  ! {type(e).__name__}: {e}")
     finally:  # 중간에 멈춰도 학습한 규칙·받는 사람·보낸 기록은 저장
         state["checked"] = now().isoformat()
         save_state(state)
@@ -328,7 +366,7 @@ def _run(state, test):
         try:
             msg = ("⚠️ 기사 알림: 사이트를 읽지 못하고 있어요. 회복되면 다시 알려 드릴게요.\n" + "\n".join(problems))[:1000] \
                 if failing else "✅ 기사 알림: 사이트 확인이 다시 정상입니다."
-            _api("sendMessage", chat_id=chat_id(state), text=msg)
+            send_message(chat_id(state), text=msg)
             state["failing"] = failing
         except Exception as e:
             print(f"  ! 상태 알림 실패: {type(e).__name__}")
