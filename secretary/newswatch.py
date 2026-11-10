@@ -1,4 +1,4 @@
-"""기사 알림 봇: 지정한 언론사 홈페이지에 새 기사가 올라오면 제목·2~3문장 요약·링크를 텔레그램으로 바로 보낸다.
+"""기사 알림 봇: 지정한 언론사 홈페이지에 새 기사가 올라오면 제목·링크(설정 시 2~3문장 요약)를 텔레그램으로 바로 보낸다.
 비서실(15분 주기)과 별개로 .github/workflows/newswatch.yml이 5분마다 실행한다(외부 무료 서비스가 깨움).
 
 사용: python -m secretary.newswatch [test]   (test = 가장 최근 기사 1건을 지금 바로 보내 시험)
@@ -290,7 +290,7 @@ def _e(s):
 
 
 def send(cid, site, a, summary):
-    text = f"📰 <b>{_e(a['title'])}</b>\n\n{_e(summary)}\n\n{_e(a['link'])}"
+    text = f"📰 <b>{_e(a['title'])}</b>\n\n" + (f"{_e(summary)}\n\n" if summary else "") + _e(a["link"])
     send_message(cid, text=text, parse_mode="HTML",
          link_preview_options={"is_disabled": False, "url": a["link"], "prefer_small_media": True})
 
@@ -353,9 +353,12 @@ def _run(state, test):
         if not new:
             continue
         new = list(reversed(new))  # 오래된 것부터 보냄
-        for a in new:
-            a["body"] = "" if a.get("via") == "naver" else fetch_body(a["link"])
-        summaries = summarize(new)
+        if site.get("summarize", cfg.get("summarize", False)):  # 요약은 설정으로 켤 때만(기본: 제목·링크만)
+            for a in new:
+                a["body"] = "" if a.get("via") == "naver" else fetch_body(a["link"])
+            summaries = summarize(new)
+        else:
+            summaries = [""] * len(new)
         cid = chat_id(state)
         for a, s in zip(new, summaries):
             send(cid, site, a, s)
