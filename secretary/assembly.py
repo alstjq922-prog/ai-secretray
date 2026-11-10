@@ -6,7 +6,7 @@ from datetime import timedelta
 
 import requests
 
-from .common import COMMON_RULES, ask_claude, dedupe, items_for_prompt, naver_search, now, pick, within
+from .common import COMMON_RULES, ask_claude, dedupe, items_for_prompt, now, pick, search_many, within
 
 API = "https://open.assembly.go.kr/portal/openapi/nzmimeepazxkubdpn"
 PASSED = ("원안가결", "수정가결", "대안반영폐기", "수정안반영폐기")
@@ -31,8 +31,14 @@ def fetch_bills(age, days):
             "KEY": os.environ["ASSEMBLY_API_KEY"], "Type": "json",
             "pIndex": page, "pSize": 1000, "AGE": age,
         }, timeout=60)
-        body = r.json().get("nzmimeepazxkubdpn")
+        r.raise_for_status()
+        j = r.json()
+        body = j.get("nzmimeepazxkubdpn")
         if not body:
+            # 데이터가 없으면 INFO-200, 그 밖의 코드는 인증키 오류·장애 → 대시보드에 실패로 표시되도록 오류를 냄
+            res = j.get("RESULT") or {}
+            if res.get("CODE") not in (None, "INFO-200"):
+                raise RuntimeError(f"국회 API 오류 {res.get('CODE')}: {res.get('MESSAGE')}")
             break
         rows = body[1]["row"]
         for b in rows:
@@ -64,9 +70,7 @@ def run(cfg, seen):
     c = cfg["assembly"]
     bills = [b for b in fetch_bills(c["age"], c["days"]) if b["link"] + b["stage"] not in seen]
 
-    council = []
-    for q in c["council_queries"]:
-        council += naver_search("news", q, display=30)
+    council = search_many("news", c["council_queries"], display=30)
     council = dedupe([it for it in council if within(it, 48)], seen)
 
     if not bills and not council:

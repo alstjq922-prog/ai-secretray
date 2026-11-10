@@ -269,6 +269,10 @@ const fmt = (iso) => {
 const pr = (p) => p ? `<span class="tag ${p}">${p}</span>` : "";
 const tag = (t, cls = "") => t ? `<span class="tag ${cls}">${esc(t)}</span>` : "";
 const link = (title, url) => /^https?:\/\//.test(url || "") ? `<a href="${esc(url)}" target="_blank" rel="noopener">${esc(title)}</a>` : esc(title);
+const heat = (r) => (r.heat || 1) > 1 ? `<span class="tag">관련 보도 ${r.heat}건</span>` : "";
+const PRI = { 상: 0, 중: 1, 하: 2 };
+const byImportance = (a, b) => (PRI[a.priority] ?? 3) - (PRI[b.priority] ?? 3) || (b.heat || 1) - (a.heat || 1) ||
+  new Date(b.last_covered || b.reported || 0) - new Date(a.last_covered || a.reported || 0);
 const fresh = (r) => r.reported && new Date(r.reported) > LAST_SEEN ? `<span class="tag new">NEW</span>` : "";
 const S = (k) => (DATA.secretaries || {})[k] || {};
 const head = (title, k) => {
@@ -330,19 +334,19 @@ const VIEWS = {
       ...(S("assembly").bills || []).map((r) => ({ ...r, from: "국회", go: "assembly" })),
     ];
     const feed = all.filter((r) => r.priority === "상" || new Date(r.reported) > LAST_SEEN)
-      .sort((a, b) => new Date(b.reported || 0) - new Date(a.reported || 0)).slice(0, 15);
+      .sort(byImportance).slice(0, 15);
     const due = duePeople();
     return `
       ${due.length ? `<div class="card" data-go="people" style="cursor:pointer"><div class="row"><b>이번에 연락할 사람 ${due.length}명</b><span class="why">${esc(due.slice(0, 3).map((p) => p.name).join(", "))}${due.length > 3 ? " 외" : ""}</span></div></div>` : ""}
-      <div class="sec-head"><h2>최신 보고</h2><span>새 보고와 중요도 '상'</span></div>
-      ${feed.length ? feed.map((r) => `<div class="card${r.priority === "상" ? " hi" : ""}"><div class="tags">${fresh(r)}${tag(r.from, "acc")}${pr(r.priority)}${r.person ? tag(r.person) : ""}${r.org ? tag(r.org) : ""}${r.chat ? tag(r.chat) : ""}${r.stage ? tag(r.stage) : ""}</div>
+      <div class="sec-head"><h2>주요 보고</h2><span>중요도·보도량 순</span></div>
+      ${feed.length ? feed.map((r) => `<div class="card${r.priority === "상" ? " hi" : ""}"><div class="tags">${fresh(r)}${tag(r.from, "acc")}${pr(r.priority)}${r.person ? tag(r.person) : ""}${r.org ? tag(r.org) : ""}${r.chat ? tag(r.chat) : ""}${r.stage ? tag(r.stage) : ""}${heat(r)}</div>
         <h3>${link(r.title, r.link)}</h3><p class="why">${esc(r.summary || "")}</p><div class="meta">${fmt(r.reported)} 보고</div></div>`).join("") : empty("새 보고 없음")}
       <div class="sec-head"><h2>비서별 보고</h2></div>
       <div class="grid2">${TABS.slice(1).map(([k, l]) => `<div class="card stat" data-go="${k}"><b>${n[k] || 0}</b><span>${l}</span></div>`).join("")}</div>`;
   },
 
   telegram() {
-    const items = S("telegram").items || [];
+    const items = [...(S("telegram").items || [])].sort(byImportance);
     return head("정보 비서", "telegram") + (items.length ? items.map((r) => `<div class="card${r.priority === "상" ? " hi" : ""}">
       <div class="tags">${fresh(r)}${pr(r.priority)}${tag(r.chat, "acc")}${tag(r.category)}</div>
       <h3>${link(r.summary, r.link)}</h3>
@@ -374,22 +378,22 @@ const VIEWS = {
   },
 
   sns() {
-    let items = S("sns").items || [];
+    let items = [...(S("sns").items || [])].sort(byImportance);
     const opt = (f, vals) => `<select data-f="${f}"><option value="">${f === "region" ? "전체 지역" : "전체 구분"}</option>${vals.map((v) => `<option ${FILTER[f] === v ? "selected" : ""}>${v}</option>`).join("")}</select>`;
     items = items.filter((r) => (!FILTER.region || r.region === FILTER.region) && (!FILTER.stance || r.stance === FILTER.stance));
     return head("SNS 모니터링 비서", "sns") +
       `<div class="filters">${opt("region", ["화성", "경기", "전국"])}${opt("stance", ["민주당 입장", "민주당 비판", "중립"])}</div>` +
       (items.length ? items.map((r) => `<div class="card${r.priority === "상" ? " hi" : ""}">
-        <div class="tags">${fresh(r)}${pr(r.priority)}${tag(r.person)}${tag(r.region)}${tag(r.stance, stanceCls(r.stance))}</div>
+        <div class="tags">${fresh(r)}${pr(r.priority)}${tag(r.person)}${tag(r.region)}${tag(r.stance, stanceCls(r.stance))}${heat(r)}</div>
         <h3>${esc(r.summary)}</h3>
         <p class="why"><b>왜:</b> ${esc(r.why)}</p>
         <div class="meta">${link(r.title, r.link)} · ${esc(r.source || "")} ${fmt(r.date)}</div></div>`).join("") : empty());
   },
 
   press() {
-    const items = S("press").items || [];
+    const items = [...(S("press").items || [])].sort(byImportance);
     return head("언론 비서", "press") + (items.length ? items.map((r) => `<div class="card${r.priority === "상" ? " hi" : ""}">
-      <div class="tags">${fresh(r)}${pr(r.priority)}${tag(r.org, "acc")}${tag(r.category)}</div>
+      <div class="tags">${fresh(r)}${pr(r.priority)}${tag(r.org, "acc")}${tag(r.category)}${heat(r)}</div>
       <h3>${link(r.title, r.link)}</h3>
       <p>${esc(r.summary)}</p>
       <p class="why"><b>화성 적용:</b> ${esc(r.hwaseong_point)}</p>
@@ -425,16 +429,19 @@ const VIEWS = {
   opinion() {
     const s = S("opinion"); const camps = s.camps || [], local = s.local || [];
     const ex = (xs) => (xs || []).length ? `<div class="ex">${xs.map((x) => `· ${link(x.title, x.link)} (${esc(x.source)})`).join("<br>")}</div>` : "";
-    return head("여론·민원 비서", "opinion") +
+    const slot = s.slot ? `<div class="meta" style="margin:-4px 0 10px">${new Date(s.slot).getHours()}시 정리 · 하루 3번(06·13·20시)${s.counts ? ` · 커뮤니티 ${s.counts.posts}건, 카페 ${s.counts.local}건 분석` : ""}</div>` : "";
+    return head("여론·민원 비서", "opinion") + slot +
+      (s.brief ? `<div class="card hi"><h3>종합</h3><p>${esc(s.brief)}</p></div>` : "") +
+      ((s.changes || []).length ? `<div class="card"><h3>지난 정리 대비 변화</h3><ul class="plain">${s.changes.map((x) => `<li>${esc(x)}</li>`).join("")}</ul></div>` : "") +
       `<div class="sec-head"><h2>화성 지역 민원</h2></div>` +
       (local.length ? local.map((l) => `<div class="card${l.priority === "상" ? " hi" : ""}">
-        <div class="tags">${pr(l.priority)}</div><h3>${esc(l.issue)}</h3><p>${esc(l.detail)}</p>
+        <div class="tags">${pr(l.priority)}${tag(l.area, "acc")}</div><h3>${esc(l.issue)}</h3><p>${esc(l.detail)}</p>
         <p class="why"><b>대응:</b> ${esc(l.action)}</p>${ex(l.examples)}</div>`).join("") : empty("특이 민원 없음")) +
       `<div class="sec-head"><h2>진영별 여론</h2></div>` +
       (camps.length ? `<div class="grid2">${camps.map((c) => `<div class="card">
         <div class="tags">${tag(c.camp, c.camp.includes("비판") ? "opp" : "dem")}</div>
         <p class="why" style="margin-top:8px">${esc(c.mood)}</p>
-        ${c.issues.map((i) => `<p><b>${esc(i.issue)}</b> — ${esc(i.detail)}</p>${ex(i.examples)}`).join("")}</div>`).join("")}</div>` : empty("커뮤니티 수집 결과 없음"));
+        ${c.issues.map((i) => `<p><b>${esc(i.issue)}</b> — ${esc(i.detail)}</p>${i.outlook ? `<p class="why"><b>전망:</b> ${esc(i.outlook)}</p>` : ""}${ex(i.examples)}`).join("")}</div>`).join("")}</div>` : empty("커뮤니티 수집 결과 없음"));
   },
 };
 
@@ -445,7 +452,7 @@ const DEMO = {
     telegram: { updated: new Date().toISOString(), items: [
       { priority: "상", chat: "예시 단체방", category: "지역", summary: "예시: 내년도 도비 공모사업 일정이 앞당겨진다는 내용 공유됨", why: "화성시 공모 준비 일정에 영향", sender: "예시 회원", reactions: 12, replies: 8, forwards: 3, link: "tg:1:1", date: new Date().toISOString(), reported: new Date().toISOString() }] },
     sns: { updated: new Date().toISOString(), items: [
-      { reported: new Date().toISOString(), priority: "상", person: "예시 의원", region: "화성", stance: "민주당 비판", summary: "예시: 화성 광역교통 대책 지연을 SNS로 비판함", why: "화성 현안이고 지역 언론 확산 가능성 높음", title: "예시 기사 제목", link: "#", source: "예시일보", date: new Date().toISOString() },
+      { reported: new Date().toISOString(), heat: 6, priority: "상", person: "예시 의원", region: "화성", stance: "민주당 비판", summary: "예시: 화성 광역교통 대책 지연을 SNS로 비판함", why: "화성 현안이고 지역 언론 확산 가능성 높음", title: "예시 기사 제목", link: "#", source: "예시일보", date: new Date().toISOString() },
       { priority: "중", person: "예시 대표", region: "전국", stance: "민주당 입장", summary: "예시: 지방재정 확충 법안 처리 촉구 글 게시", why: "지자체 재정에 직접 영향", title: "예시 기사 제목 2", link: "#", source: "예시뉴스", date: new Date().toISOString() }] },
     press: { updated: new Date().toISOString(), items: [
       { priority: "상", org: "예시시", category: "교통", title: "예시시, 전국 최초 수요응답형 통근버스 도입", summary: "산업단지 출퇴근 수요에 맞춰 노선을 실시간 조정함", hwaseong_point: "동탄·향남 산단 통근에 적용 검토 가능", link: "#", date: new Date().toISOString() }] },
@@ -453,10 +460,12 @@ const DEMO = {
       { title: "산단 수요응답형 통근버스", category: "교통", difficulty: "보통", background: "서부 산단 대중교통 공백", idea: "앱 호출형 통근버스를 산단 3곳에서 시범 운영", reference: "예시시 사례", steps: ["수요조사", "시범 노선 운영", "확대"] }] },
     assembly: { updated: new Date().toISOString(), bills: [
       { priority: "상", stage: "상임위 통과", committee: "행정안전위원회", title: "지방자치법 일부개정법률안(대안)", summary: "특례시 사무 특례 확대(추정)", impact: "화성시 권한 확대 가능", proposer: "행정안전위원장", date: "2026-10-28", link: "#" }], council: [] },
-    opinion: { updated: new Date().toISOString(),
-      local: [{ priority: "중", issue: "동탄 등굣길 안전 민원", detail: "공사 차량 통행으로 통학로 위험 지적 다수", action: "현장 점검 후 안전요원 배치 검토", examples: [{ title: "예시 카페글", link: "#", source: "예시맘카페" }] }],
+    opinion: { updated: new Date().toISOString(), slot: new Date().toISOString(), counts: { posts: 240, local: 180 },
+      brief: "예시: 물가·부동산 쟁점이 양 진영 모두에서 가장 많이 회자됨. 화성 지역은 동탄 통학로 안전 민원이 늘고 있음.",
+      changes: ["예시: 동탄 통학로 민원이 오전보다 늘어남"],
+      local: [{ priority: "중", area: "동탄", issue: "동탄 등굣길 안전 민원", detail: "공사 차량 통행으로 통학로 위험 지적 다수", action: "현장 점검 후 안전요원 배치 검토", examples: [{ title: "예시 카페글", link: "#", source: "예시맘카페" }] }],
       camps: [
-        { camp: "민주당 우호 성향", mood: "예시: 정부 정책 성과 공유 분위기", issues: [{ issue: "예시 쟁점", detail: "설명", examples: [] }] },
+        { camp: "민주당 우호 성향", mood: "예시: 정부 정책 성과 공유 분위기", issues: [{ issue: "예시 쟁점", detail: "설명", outlook: "예시 전망", examples: [] }] },
         { camp: "민주당 비판 성향", mood: "예시: 물가 문제 비판 집중", issues: [{ issue: "예시 쟁점", detail: "설명", examples: [] }] }] },
   },
   people: { updated: 0, list: [

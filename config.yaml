@@ -4,15 +4,16 @@ claude:
   model: claude-haiku-5-5    # 품질을 높이려면 claude-opus-5-5 (약 40배 비쌈)
   effort: low                # low | medium | high — 높을수록 꼼꼼하지만 비쌈
 
-keep_days: 3                 # 지난 보고를 며칠간 화면에 남길지
+keep_days: 3                 # 지난 보고를 며칠간 화면에 남길지(후속 보도가 계속 나오면 그만큼 더 남음)
+max_keep: 30                 # 비서별로 화면에 남길 최대 보고 수. 넘치면 덜 중요한 것(우선순위·보도량 낮은 것)부터 정리
 
 # 비서별 확인 주기(분). 실행은 15분마다 돌고, 주기가 된 비서만 일합니다.
 # 새 글이 없으면 Claude를 부르지 않으므로 비용이 들지 않습니다.
+# 여론·민원 비서는 주기 대신 정해진 시각에 정리합니다(아래 opinion.times).
 intervals:
   sns: 15
   press: 15
   telegram: 30
-  opinion: 60
   assembly: 360
 
 # ─────────────────────────────── 1. SNS 모니터링 비서
@@ -21,23 +22,93 @@ sns:
   news_words: [페이스북, SNS, 인스타그램]
   exclude_words: [축제, 기념식, 개막식, 체육대회, 봉사활동, 생일, 축하]
   # tier 1 = 최우선, 2 = 주요, 3 = 참고
+  # 등급별 검색 주기(분). 인원이 많아 전원을 15분마다 검색하면 네이버 하루 한도(2만5천 건)에 가까워지므로 나눔.
+  tier_minutes: {1: 15, 2: 60, 3: 180}
+  # name: 이름이 있으면 이름으로 검색. 비워 두면 key(없으면 role)로 검색 → 개각·선거로 사람이 바뀌어도 자동으로 따라감
+  # key: 기사에 실제로 쓰이는 줄임 직책(예: 국토부 장관). 기사 제목·요약에 이 말이 있어야 수집됨
   # blog_id: 네이버 블로그 주소의 아이디(blog.naver.com/<아이디>) — 있으면 본인 블로그 글도 확인
-  # ※ 2026년 지방선거 이후 바뀐 인물은 직접 수정해 주세요. name이 비어 있으면 건너뜁니다.
+  # ※ 이름은 2026.6.3 지방선거 결과·보도로 확인된 것만 넣었습니다. 장관은 교체가 잦아 직책으로 검색합니다.
   people:
+    # ── 1등급: 15분마다
     - {name: 이재명, role: 대통령, tier: 1}
-    - {name: 김민석, role: 국무총리, tier: 1}
-    - {name: "", role: 경기도지사, tier: 1}
-    - {name: "", role: 화성시장, tier: 1}
+    - {name: "", key: 국무총리, role: 국무총리, tier: 1}
+    - {name: 추미애, role: 경기도지사(민주), tier: 1}
+    - {name: 정명근, role: 화성시장(민주), tier: 1}
     - {name: 송옥주, role: "국회의원 화성갑(민주)", tier: 1}
     - {name: 이준석, role: "국회의원 화성을(개혁신당)", tier: 1}
     - {name: 권칠승, role: "국회의원 화성병(민주)", tier: 1}
     - {name: 전용기, role: "국회의원 화성정(민주)", tier: 1}
-    - {name: 정청래, role: 더불어민주당 대표, tier: 1}
-    - {name: 장동혁, role: 국민의힘 대표, tier: 1}
-    - {name: "", role: 서울시장, tier: 2}
-    - {name: "", role: 인천시장, tier: 2}
-    - {name: "", role: 행정안전부 장관, tier: 2}
-    - {name: "", role: 국토교통부 장관, tier: 2}
+    - {name: "", key: 민주당 대표, role: 더불어민주당 대표, tier: 1}
+    - {name: "", key: 국민의힘 대표, role: 국민의힘 대표, tier: 1}
+
+    # ── 2등급: 1시간마다 — 지자체 행정·예산에 직접 영향 + 수도권 광역·화성 비교 도시
+    - {name: "", key: 대통령비서실장, role: 대통령비서실장, tier: 2}
+    - {name: "", key: 경제부총리, role: 경제부총리 겸 재정경제부 장관, tier: 2}
+    - {name: "", key: 기획예산처 장관, role: 기획예산처 장관, tier: 2}
+    - {name: "", key: 행안부 장관, role: 행정안전부 장관, tier: 2}
+    - {name: "", key: 국토부 장관, role: 국토교통부 장관, tier: 2}
+    - {name: "", key: 교육부 장관, role: 사회부총리 겸 교육부 장관, tier: 2}
+    - {name: 오세훈, role: 서울시장(국힘), tier: 2}
+    - {name: 박찬대, role: 인천시장(민주), tier: 2}
+    - {name: 이재준, role: 수원시장(민주), tier: 2}
+    - {name: 이상일, role: 용인시장(국힘), tier: 2}
+    - {name: 민경선, role: 고양시장(민주), tier: 2}
+    - {name: 신상진, role: 성남시장(국힘), tier: 2}
+    - {name: "", key: 평택시장, role: 평택시장, tier: 2}
+
+    # ── 3등급: 3시간마다 — 나머지 국무회의 참석자
+    - {name: "", key: 정책실장, role: 대통령실 정책실장, tier: 3}
+    - {name: "", key: 국가안보실장, role: 국가안보실장, tier: 3}
+    - {name: "", key: 국무조정실장, role: 국무조정실장, tier: 3}
+    - {name: "", key: 과기정통부 장관, role: 과학기술정보통신부 장관, tier: 3}
+    - {name: "", key: 외교부 장관, role: 외교부 장관, tier: 3}
+    - {name: "", key: 통일부 장관, role: 통일부 장관, tier: 3}
+    - {name: "", key: 법무부 장관, role: 법무부 장관, tier: 3}
+    - {name: "", key: 국방부 장관, role: 국방부 장관, tier: 3}
+    - {name: "", key: 보훈부 장관, role: 국가보훈부 장관, tier: 3}
+    - {name: "", key: 문체부 장관, role: 문화체육관광부 장관, tier: 3}
+    - {name: "", key: 농식품부 장관, role: 농림축산식품부 장관, tier: 3}
+    - {name: "", key: 산업부 장관, role: 산업통상부 장관, tier: 3}
+    - {name: "", key: 복지부 장관, role: 보건복지부 장관, tier: 3}
+    - {name: "", key: 기후부 장관, role: 기후에너지환경부 장관, tier: 3}
+    - {name: "", key: 노동부 장관, role: 고용노동부 장관, tier: 3}
+    - {name: "", key: 성평등부 장관, role: 성평등가족부 장관, tier: 3}
+    - {name: "", key: 해수부 장관, role: 해양수산부 장관, tier: 3}
+    - {name: "", key: 중기부 장관, role: 중소벤처기업부 장관, tier: 3}
+    - {name: "", key: 금융위원장, role: 금융위원장, tier: 3}
+
+    # ── 3등급: 나머지 광역단체장 (전남·광주는 2026.7 통합)
+    - {name: 전재수, role: 부산시장(민주), tier: 3}
+    - {name: 추경호, role: 대구시장(국힘), tier: 3}
+    - {name: 민형배, role: 전남광주특별시장(민주), tier: 3}
+    - {name: 허태정, role: 대전시장(민주), tier: 3}
+    - {name: 김상욱, role: 울산시장(민주), tier: 3}
+    - {name: 조상호, role: 세종시장(민주), tier: 3}
+    - {name: 우상호, role: 강원도지사(민주), tier: 3}
+    - {name: 신용한, role: 충북도지사(민주), tier: 3}
+    - {name: 박수현, role: 충남도지사(민주), tier: 3}
+    - {name: 이원택, role: 전북도지사(민주), tier: 3}
+    - {name: 이철우, role: 경북도지사(국힘), tier: 3}
+    - {name: 박완수, role: 경남도지사(국힘), tier: 3}
+    - {name: 위성곤, role: 제주도지사(민주), tier: 3}
+
+    # ── 3등급: 인구 50만 이상 기초단체장 (위 2등급 제외)
+    - {name: 강기윤, role: 창원시장, tier: 3}
+    - {name: 이장섭, role: 청주시장(민주), tier: 3}
+    - {name: 조용익, role: 부천시장(민주), tier: 3}
+    - {name: 최현덕, role: 남양주시장(민주), tier: 3}
+    - {name: "", key: 천안시장, role: 천안시장, tier: 3}
+    - {name: "", key: 전주시장, role: 전주시장, tier: 3}
+    - {name: 이민근, role: 안산시장(국힘), tier: 3}
+    - {name: 정영두, role: 김해시장, tier: 3}
+    - {name: 임병택, role: 시흥시장(민주), tier: 3}
+    - {name: "", key: 파주시장, role: 파주시장, tier: 3}
+    - {name: 최대호, role: 안양시장(민주), tier: 3}
+    - {name: "", key: 송파구청장, role: 서울 송파구청장, tier: 3}
+    - {name: "", key: 강서구청장, role: 서울 강서구청장, tier: 3}
+    - {name: "", key: 강남구청장, role: 서울 강남구청장, tier: 3}
+    - {name: "", key: 서구청장, role: 인천 서구청장, tier: 3}
+    - {name: "", key: 달서구청장, role: 대구 달서구청장, tier: 3}
 
 # ─────────────────────────────── 2. 정보 비서 (텔레그램 단체방)
 # 방 이름은 공개 저장소에 노출되지 않도록 GitHub 비밀값 TELEGRAM_CHATS에 넣습니다.
@@ -82,6 +153,11 @@ assembly:
 
 # ─────────────────────────────── 6. 여론·민원 비서
 opinion:
+  times: ["06:00", "13:00", "20:00"]   # 정리 시각(한국 시간). GitHub 사정으로 수십 분 늦을 수 있음
+  effort: medium             # 하루 3번만 하므로 더 꼼꼼하게(low | medium | high)
+  posts_per_board: 60        # 커뮤니티별 인기글 수집 수
+  cafe_display: 50           # 민원 검색어별 카페글 수집 수
+  max_local_posts: 200       # Claude에 넘길 카페글 최대 수
   # 화성 지역 민원은 네이버 카페(맘카페 등) 검색으로 찾습니다.
   local_queries: [화성시 민원, 동탄 민원, 동탄 불편, 화성시청 불만, 봉담 민원, 향남 민원, 화성 교통 불편]
   # 커뮤니티 인기글: 사이트가 해외 서버(GitHub)를 차단하면 그 사이트만 자동으로 건너뜁니다.
