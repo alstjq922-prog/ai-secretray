@@ -7,6 +7,7 @@ import json
 import os
 import re
 import sys
+import time
 import xml.etree.ElementTree as ET
 from pathlib import Path
 from urllib.parse import parse_qsl, urljoin, urlparse
@@ -24,6 +25,17 @@ SHAPE = {"items": [{"idx": int, "summary": str}]}
 
 # ---------- 기사 목록 ----------
 
+def get(url):
+    """사이트가 잠깐 느리거나 응답이 없을 때를 대비해 최대 3번 시도(5초·10초 쉬고)."""
+    for attempt in range(3):
+        try:
+            return requests.get(url, headers=UA, timeout=30)
+        except (requests.Timeout, requests.ConnectionError):
+            if attempt == 2:
+                raise
+            time.sleep(5 * (attempt + 1))
+
+
 def _idkey(link, pattern):
     """같은 기사가 주소만 조금 달라도(파라미터 순서·페이지 번호 등) 하나로 보도록 '경로 + 기사 번호'로 식별."""
     if not re.search(pattern, link):
@@ -35,7 +47,7 @@ def _idkey(link, pattern):
 
 
 def from_rss(site):
-    r = requests.get(site["rss"], headers=UA, timeout=20)
+    r = get(site["rss"])
     r.raise_for_status()
     root = ET.fromstring(r.content)
     out = []
@@ -48,7 +60,7 @@ def from_rss(site):
 
 
 def from_list(site):
-    r = requests.get(site["list_url"], headers=UA, timeout=20)
+    r = get(site["list_url"])
     r.raise_for_status()
     soup = BeautifulSoup(r.text, "html.parser")
     pat = re.compile(site["link_pattern"])
@@ -91,7 +103,7 @@ def _generalize(url):
 def discover(site):
     """홈페이지에서 RSS 링크를 찾고, 없으면 가장 많이 반복되는 '번호가 들어간 링크' 규칙을 기사 링크로 본다."""
     home = site.get("home") or site.get("list_url")
-    r = requests.get(home, headers=UA, timeout=20)
+    r = get(home)
     r.raise_for_status()
     soup = BeautifulSoup(r.text, "html.parser")
     found = {"list_url": home}
@@ -156,7 +168,7 @@ def fetch_list(site, state=None):
 def fetch_body(link):
     """기사 본문(요약용). 실패하면 빈 문자열(제목·설명만으로 요약)."""
     try:
-        r = requests.get(link, headers=UA, timeout=20)
+        r = get(link)
         r.raise_for_status()
     except requests.RequestException:
         return ""
@@ -230,9 +242,22 @@ def save_state(state):
 
 
 def run(test=False):
-    cfg = load_config()["newswatch"]
     state = load_state()
     before = json.dumps(state, sort_keys=True)
+    try:
+        _run(state, test)
+    finally:  # 중간에 멈춰도 학습한 규칙·받는 사람·보낸 기록은 저장
+        state["checked"] = now().isoformat()
+        save_state(state)
+        strip = lambda d: json.dumps({k: v for k, v in d.items() if k != "checked"}, sort_keys=True)
+        changed = strip(state) != strip(json.loads(before))
+        if os.environ.get("GITHUB_OUTPUT"):
+            with open(os.environ["GITHUB_OUTPUT"], "a") as f:
+                f.write(f"changed={'true' if changed else 'false'}\n")
+
+
+def _run(state, test):
+    cfg = load_config()["newswatch"]
     sent_any, problems = False, []
     for site in cfg["sites"]:
         seen = state.setdefault("seen", {}).setdefault(site["name"], [])
@@ -277,14 +302,6 @@ def run(test=False):
             state["failing"] = failing
         except Exception as e:
             print(f"  ! 상태 알림 실패: {type(e).__name__}")
-    state["checked"] = now().isoformat()
-    save_state(state)
-    # 상태가 바뀌었을 때만 캐시에 저장(GitHub Actions 출력)
-    changed = json.dumps({k: v for k, v in state.items() if k != "checked"}, sort_keys=True) != \
-        json.dumps({k: v for k, v in json.loads(before or "{}").items() if k != "checked"}, sort_keys=True)
-    if os.environ.get("GITHUB_OUTPUT"):
-        with open(os.environ["GITHUB_OUTPUT"], "a") as f:
-            f.write(f"changed={'true' if changed else 'false'}\n")
     if problems and test:
         raise SystemExit("기사 목록 수집 실패: " + " | ".join(problems))
 
