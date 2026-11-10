@@ -1,0 +1,52 @@
+name: 기사 알림
+
+on:
+  # 5분마다 외부 무료 서비스(cron-job.org)가 이 작업을 실행합니다(README '8. 기사 알림 봇').
+  workflow_dispatch:
+    inputs:
+      test:
+        description: "test 를 넣으면 가장 최근 기사 1건을 지금 바로 보내 시험"
+        required: false
+        default: ""
+  # 외부 서비스가 멈췄을 때를 대비한 GitHub 자체 실행(1시간마다, 늦어질 수 있음)
+  schedule:
+    - cron: "41 * * * *"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: newswatch
+  cancel-in-progress: false
+
+jobs:
+  watch:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - run: pip install anthropic requests pyyaml beautifulsoup4
+      # 이미 보낸 기사 기록을 이어받음
+      - uses: actions/cache/restore@v4
+        with:
+          path: newswatch_state.json
+          key: newswatch-${{ github.run_id }}
+          restore-keys: newswatch-
+      - name: 새 기사 확인
+        id: watch
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          NEWS_BOT_TOKEN: ${{ secrets.NEWS_BOT_TOKEN }}
+          NEWS_BOT_CHAT_ID: ${{ secrets.NEWS_BOT_CHAT_ID }}
+          TELEGRAM_BOT_CHAT_ID: ${{ secrets.TELEGRAM_BOT_CHAT_ID }}
+          TEST: ${{ github.event.inputs.test }}
+        run: python -m secretary.newswatch $TEST
+      - if: steps.watch.outputs.changed == 'true'
+        uses: actions/cache/save@v4
+        with:
+          path: newswatch_state.json
+          key: newswatch-${{ github.run_id }}-${{ github.run_attempt }}
