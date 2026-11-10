@@ -187,5 +187,8 @@ newswatch:
   sites:
     # home만 적으면 홈페이지에서 RSS나 기사 링크 규칙을 스스로 찾습니다(찾은 규칙은 기억해 두고 계속 사용).
     # 직접 지정하려면 rss 또는 list_url + link_pattern(정규식)을 적으세요.
+    # naver_domain·naver_queries: 사이트가 해외 서버(GitHub)를 막을 때 네이버 뉴스에서 이 도메인 기사만 찾음
     - name: 화성투데이
       home: https://www.hstodays.com/
+      naver_domain: hstodays.com
+      naver_queries: [화성시, 화성, 동탄, 봉담, 향남, 화성특례시]

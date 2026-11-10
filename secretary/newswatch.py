@@ -29,21 +29,26 @@ def get(url):
     """사이트가 잠깐 느리거나 응답이 없을 때를 대비해 최대 3번 시도(5초·10초 쉬고)."""
     for attempt in range(3):
         try:
-            return requests.get(url, headers=UA, timeout=30)
+            return requests.get(url, headers=UA, timeout=(10, 30))
         except (requests.Timeout, requests.ConnectionError):
             if attempt == 2:
                 raise
             time.sleep(5 * (attempt + 1))
 
 
-def _idkey(link, pattern):
-    """같은 기사가 주소만 조금 달라도(파라미터 순서·페이지 번호 등) 하나로 보도록 '경로 + 기사 번호'로 식별."""
-    if not re.search(pattern, link):
-        return link
+ID_PARAMS = ("idxno", "uid", "no", "wr_id", "aid", "articleid", "article_id", "id", "idx", "nid")
+
+
+def _idkey(link, pattern=None):
+    """같은 기사를 하나로 식별: 주소 모양(홈페이지 /18325, sub_read.html?uid=18325, 네이버 원문 링크 등)이
+    달라도 기사 번호가 같으면 같은 기사로 본다. 번호를 못 찾으면 경로를 쓴다."""
     u = urlparse(link)
-    ids = re.findall(r"\\b(\w+)=\\d\+", pattern) + re.findall(r"(\w+)=\\d\+", pattern)
-    q = "&".join(f"{k}={v}" for k, v in sorted(parse_qsl(u.query)) if k in ids)
-    return u.path + ("?" + q if q else "")
+    q = {k.lower(): v for k, v in parse_qsl(u.query)}
+    for k in ID_PARAMS:
+        if re.fullmatch(r"\d{3,}", q.get(k, "")):
+            return "n:" + q[k]
+    nums = re.findall(r"\d{3,}", u.path)
+    return "n:" + nums[-1] if nums else u.path
 
 
 def from_rss(site):
@@ -67,7 +72,7 @@ def from_list(site):
     out, keys = [], set()
     for a in soup.find_all("a", href=True):
         title = a.get_text(" ", strip=True)
-        if len(title) < 8 or not pat.search(a["href"]):
+        if len(title) < 6 or not pat.search(a["href"]):
             continue
         link = urljoin(site["list_url"], a["href"])
         k = _idkey(link, site["link_pattern"])
@@ -126,6 +131,19 @@ def discover(site):
     return found
 
 
+def from_naver(site):
+    """사이트가 해외 서버(GitHub)를 막을 때: 네이버 뉴스 검색에서 그 언론사 도메인의 기사만 고른다."""
+    from .common import search_many
+    domain = site["naver_domain"]
+    out, keys = [], set()
+    for it in search_many("news", site["naver_queries"], display=100):
+        if domain not in (it.get("link") or "") or _idkey(it["link"]) in keys:
+            continue
+        keys.add(_idkey(it["link"]))
+        out.append({"title": it["title"], "link": it["link"], "desc": it["desc"], "date": it.get("date") or "", "via": "naver"})
+    return sorted(out, key=lambda x: x["date"], reverse=True)
+
+
 def fetch_list(site, state=None):
     """RSS를 먼저 쓰고, 안 되면 기사 목록 페이지를 읽는다. 최신 기사가 앞.
     설정한 주소가 안 되면 홈페이지에서 RSS·기사 링크 규칙을 찾아(state에 기억) 다시 시도한다."""
@@ -150,18 +168,30 @@ def fetch_list(site, state=None):
     items = attempt(src)
     if items:
         return items, src
-    try:
-        print(f"  {site['name']}: 홈페이지에서 기사 링크 규칙을 찾는 중")
-        found = discover(site)
-    except Exception as e:
-        errors.append(f"홈페이지 {type(e).__name__}: {e}"[:200])
-        found = {}
-    if found.get("rss") or found.get("link_pattern"):
-        src = {**site, **found}
-        items = attempt(src)
-        if items:
-            learned[site["name"]] = {k: found[k] for k in ("rss", "list_url", "link_pattern") if k in found}
-            return items, src
+    down = any("Timeout" in e or "ConnectionError" in e for e in errors)  # 사이트가 응답 자체를 안 하면 홈페이지도 같음
+    if not down:
+        try:
+            print(f"  {site['name']}: 홈페이지에서 기사 링크 규칙을 찾는 중")
+            found = discover(site)
+        except Exception as e:
+            errors.append(f"홈페이지 {type(e).__name__}: {e}"[:200])
+            down = "Timeout" in type(e).__name__ or "Connection" in type(e).__name__
+            found = {}
+        if found.get("rss") or found.get("link_pattern"):
+            src = {**site, **found}
+            items = attempt(src)
+            if items:
+                learned[site["name"]] = {k: found[k] for k in ("rss", "list_url", "link_pattern") if k in found}
+                return items, src
+    if site.get("naver_domain"):
+        try:
+            items = from_naver(site)
+            print(f"  {site['name']}: 사이트 접속이 안 돼 네이버 뉴스에서 {len(items)}건")
+            if items:
+                return items, site
+            errors.append("네이버 0건")
+        except Exception as e:
+            errors.append(f"네이버 {type(e).__name__}: {e}"[:200])
     raise RuntimeError(f"{site['name']} 기사 목록을 못 읽음 — " + " / ".join(errors))
 
 
@@ -268,7 +298,7 @@ def _run(state, test):
             problems.append(str(e))
             continue
         for it in items:
-            it["key"] = _idkey(it["link"], src.get("link_pattern") or r"$^")
+            it["key"] = _idkey(it["link"])
         if test:
             new = items[:1]
         elif not seen:  # 처음 실행: 지금 있는 기사는 '이미 본 것'으로 기록만 하고 다음 새 기사부터 알림
@@ -282,7 +312,7 @@ def _run(state, test):
             continue
         new = list(reversed(new))  # 오래된 것부터 보냄
         for a in new:
-            a["body"] = fetch_body(a["link"])
+            a["body"] = "" if a.get("via") == "naver" else fetch_body(a["link"])
         summaries = summarize(new)
         cid = chat_id(state)
         for a, s in zip(new, summaries):
