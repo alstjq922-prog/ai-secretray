@@ -162,13 +162,15 @@ def ask_claude(system, user, shape, max_tokens=16000, effort=None):
     global _client
     cfg = load_config()["claude"]
     _client = _client or anthropic.Anthropic()
-    resp = _client.messages.create(
+    # 긴 응답(여론 비서 등)은 스트리밍으로 받아야 함. 결과는 다 받은 뒤 한 번에 처리.
+    with _client.messages.stream(
         model=cfg["model"],
         max_tokens=max_tokens,
         system=system,
         messages=[{"role": "user", "content": user}],
         output_config={"effort": effort or cfg["effort"], "format": {"type": "json_schema", "schema": _schema(shape)}},
-    )
+    ) as stream:
+        resp = stream.get_final_message()
     if resp.stop_reason == "refusal":
         raise RuntimeError("Claude가 요청을 거절했습니다")
     if resp.stop_reason == "max_tokens":

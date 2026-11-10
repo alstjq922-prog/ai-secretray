@@ -23,7 +23,7 @@ concurrency:
 jobs:
   report:
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 20  # 여론 비서의 깊은 정리가 몇 분 걸릴 수 있음
     environment:
       name: github-pages
     steps:
