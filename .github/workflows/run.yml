@@ -38,6 +38,13 @@ jobs:
           python-version: "3.12"
           cache: pip
       - run: pip install -r requirements.txt
+      # 이전 실행의 상태(암호화된 보고서·본 기사 기록)를 이어받음. 가장 최근에 저장된 것을 불러옴
+      # (없으면 게시된 웹페이지의 data.enc에서 가져옴)
+      - uses: actions/cache/restore@v4
+        with:
+          path: docs/data.enc
+          key: state-${{ github.run_id }}
+          restore-keys: state-
       - name: 비서 실행
         env:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
@@ -53,6 +60,10 @@ jobs:
           DASHBOARD_PASSWORD: ${{ secrets.DASHBOARD_PASSWORD }}
           ONLY: ${{ github.event.inputs.only }}
         run: python -m secretary.main $ONLY
+      - uses: actions/cache/save@v4
+        with:
+          path: docs/data.enc
+          key: state-${{ github.run_id }}-${{ github.run_attempt }}
       # 저장소에 커밋하지 않고 웹페이지로 바로 배포 (암호화 파일이 쌓여 용량이 차는 것을 방지)
       - uses: actions/upload-pages-artifact@v3
         with:

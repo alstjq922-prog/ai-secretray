@@ -32,7 +32,9 @@ def save(data):
 
 
 def _read_previous():
-    """이전 보고서를 읽는다. 저장소에 커밋하지 않고 웹페이지로만 배포하므로 게시된 파일에서 가져온다."""
+    """이전 보고서를 읽는다. 보통은 Actions 캐시가 복원해 둔 파일을 쓰고,
+    캐시가 없을 때만 게시된 웹페이지에서 가져온다(웹페이지는 몇 분간 이전 내용이 보일 수 있음).
+    ※ data.enc를 저장소에 커밋하면 매번 그 옛날 파일부터 시작하게 되므로 커밋하지 않는다(.gitignore)."""
     if DATA_FILE.exists():
         return DATA_FILE.read_text()
     repo = os.environ.get("GITHUB_REPOSITORY")
