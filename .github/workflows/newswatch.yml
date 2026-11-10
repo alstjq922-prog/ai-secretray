@@ -29,7 +29,7 @@ jobs:
         with:
           python-version: "3.12"
           cache: pip
-      - run: pip install anthropic requests pyyaml beautifulsoup4
+      - run: pip install anthropic requests pyyaml beautifulsoup4 cryptography
       # 이미 보낸 기사 기록을 이어받음
       - uses: actions/cache/restore@v4
         with:
@@ -45,6 +45,7 @@ jobs:
           NEWS_BOT_TOKEN: ${{ secrets.NEWS_BOT_TOKEN }}
           NEWS_BOT_CHAT_ID: ${{ secrets.NEWS_BOT_CHAT_ID }}
           TELEGRAM_BOT_CHAT_ID: ${{ secrets.TELEGRAM_BOT_CHAT_ID }}
+          DASHBOARD_PASSWORD: ${{ secrets.DASHBOARD_PASSWORD }}
           TEST: ${{ github.event.inputs.test }}
         run: python -m secretary.newswatch $TEST
       - if: always() && steps.watch.outputs.changed == 'true'
