@@ -185,7 +185,7 @@ briefing:
 newswatch:
   max_per_run: 10            # 한 번에 보낼 최대 기사 수(한꺼번에 많이 올라오면 나머지는 다음 실행 때)
   sites:
+    # home만 적으면 홈페이지에서 RSS나 기사 링크 규칙을 스스로 찾습니다(찾은 규칙은 기억해 두고 계속 사용).
+    # 직접 지정하려면 rss 또는 list_url + link_pattern(정규식)을 적으세요.
     - name: 화성투데이
-      rss: https://www.hstodays.com/rss/allArticle.xml
-      list_url: https://www.hstodays.com/news/articleList.html?view_type=sm
-      link_pattern: "articleView\\.html\\?idxno=\\d+"
+      home: https://www.hstodays.com/

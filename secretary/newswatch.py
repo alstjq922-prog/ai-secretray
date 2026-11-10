@@ -9,7 +9,7 @@ import re
 import sys
 import xml.etree.ElementTree as ET
 from pathlib import Path
-from urllib.parse import urljoin
+from urllib.parse import parse_qsl, urljoin, urlparse
 
 import requests
 from bs4 import BeautifulSoup
@@ -25,9 +25,13 @@ SHAPE = {"items": [{"idx": int, "summary": str}]}
 # ---------- 기사 목록 ----------
 
 def _idkey(link, pattern):
-    """같은 기사가 주소만 조금 달라도(파라미터 순서 등) 하나로 보도록 기사 번호로 식별."""
-    m = re.search(pattern, link)
-    return m.group(0) if m else link
+    """같은 기사가 주소만 조금 달라도(파라미터 순서·페이지 번호 등) 하나로 보도록 '경로 + 기사 번호'로 식별."""
+    if not re.search(pattern, link):
+        return link
+    u = urlparse(link)
+    ids = re.findall(r"\\b(\w+)=\\d\+", pattern) + re.findall(r"(\w+)=\\d\+", pattern)
+    q = "&".join(f"{k}={v}" for k, v in sorted(parse_qsl(u.query)) if k in ids)
+    return u.path + ("?" + q if q else "")
 
 
 def from_rss(site):
@@ -62,20 +66,90 @@ def from_list(site):
     return out
 
 
-def fetch_list(site):
-    """RSS를 먼저 쓰고, 안 되면 기사 목록 페이지를 읽는다. 최신 기사가 앞."""
-    errors = []
-    for name, fn, need in (("RSS", from_rss, "rss"), ("목록", from_list, "list_url")):
-        if not site.get(need):
+NON_ID_PARAMS = {"page", "p", "pg", "sca", "sfl", "stx", "sst", "sod", "spt", "sc_area", "view_type", "sort"}
+
+
+def _generalize(url):
+    r"""기사 주소를 규칙(정규식)으로: 숫자는 \d+, 긴 제목형 경로는 [^/?#]+ 로 바꾼다.
+    쿼리는 숫자로 된 기사 번호 파라미터만 규칙에 넣는다(페이지 번호 등은 무시)."""
+    u = urlparse(url)
+    segs = []
+    for seg in u.path.split("/"):
+        if re.fullmatch(r"\d+", seg):
+            segs.append(r"\d+")
+        elif len(seg) > 20 or "%" in seg:
+            segs.append(r"[^/?#]+")
+        else:
+            segs.append(re.escape(re.sub(r"\d{2,}", "0000", seg)).replace("0000", r"\d+"))
+    pat = "/".join(segs)
+    ids = [k for k, v in parse_qsl(u.query) if re.fullmatch(r"\d+", v) and k.lower() not in NON_ID_PARAMS]
+    if ids:
+        pat += r"\?" + "".join(rf"(?=[^#]*\b{re.escape(k)}=\d+)" for k in ids)
+    return pat
+
+
+def discover(site):
+    """홈페이지에서 RSS 링크를 찾고, 없으면 가장 많이 반복되는 '번호가 들어간 링크' 규칙을 기사 링크로 본다."""
+    home = site.get("home") or site.get("list_url")
+    r = requests.get(home, headers=UA, timeout=20)
+    r.raise_for_status()
+    soup = BeautifulSoup(r.text, "html.parser")
+    found = {"list_url": home}
+    feed = soup.find("link", attrs={"type": re.compile("rss|atom", re.I)}, href=True)
+    if feed:
+        found["rss"] = urljoin(home, feed["href"])
+    host = urlparse(home).netloc.replace("www.", "")
+    groups = {}
+    for a in soup.find_all("a", href=True):
+        link = urljoin(home, a["href"])
+        title = a.get_text(" ", strip=True)
+        if host not in urlparse(link).netloc or len(title) < 8 or not re.search(r"\d{3,}", link):
             continue
-        try:
-            items = fn(site)
-            if items:
-                print(f"  {site['name']}: {name}에서 {len(items)}건")
-                return items
-            errors.append(f"{name} 0건")
-        except Exception as e:
-            errors.append(f"{name} {type(e).__name__}: {e}"[:200])
+        groups.setdefault(_generalize(link), {})[link] = title
+    ranked = sorted(groups.items(), key=lambda kv: -len(kv[1]))
+    for pat, links in ranked[:5]:  # 진단용(공개 정보인 홈페이지 링크 규칙만 출력)
+        print(f"    후보 {len(links)}건: {pat}  예) {next(iter(links))}")
+    if ranked and len(ranked[0][1]) >= 5:
+        found["link_pattern"] = ranked[0][0]
+    return found
+
+
+def fetch_list(site, state=None):
+    """RSS를 먼저 쓰고, 안 되면 기사 목록 페이지를 읽는다. 최신 기사가 앞.
+    설정한 주소가 안 되면 홈페이지에서 RSS·기사 링크 규칙을 찾아(state에 기억) 다시 시도한다."""
+    errors = []
+
+    def attempt(src):
+        for name, fn, need in (("RSS", from_rss, "rss"), ("목록", from_list, "link_pattern")):
+            if not src.get(need) or (name == "목록" and not src.get("list_url")):
+                continue
+            try:
+                items = fn(src)
+                if items:
+                    print(f"  {site['name']}: {name}에서 {len(items)}건")
+                    return items
+                errors.append(f"{name} 0건")
+            except Exception as e:
+                errors.append(f"{name} {type(e).__name__}: {e}"[:200])
+        return None
+
+    learned = (state or {}).setdefault("learned", {})
+    src = {**site, **learned.get(site["name"], {})}
+    items = attempt(src)
+    if items:
+        return items, src
+    try:
+        print(f"  {site['name']}: 홈페이지에서 기사 링크 규칙을 찾는 중")
+        found = discover(site)
+    except Exception as e:
+        errors.append(f"홈페이지 {type(e).__name__}: {e}"[:200])
+        found = {}
+    if found.get("rss") or found.get("link_pattern"):
+        src = {**site, **found}
+        items = attempt(src)
+        if items:
+            learned[site["name"]] = {k: found[k] for k in ("rss", "list_url", "link_pattern") if k in found}
+            return items, src
     raise RuntimeError(f"{site['name']} 기사 목록을 못 읽음 — " + " / ".join(errors))
 
 
@@ -163,13 +237,13 @@ def run(test=False):
     for site in cfg["sites"]:
         seen = state.setdefault("seen", {}).setdefault(site["name"], [])
         try:
-            items = fetch_list(site)
+            items, src = fetch_list(site, state)
         except Exception as e:
             print(f"  ! {e}")
             problems.append(str(e))
             continue
         for it in items:
-            it["key"] = _idkey(it["link"], site.get("link_pattern", r"$^"))
+            it["key"] = _idkey(it["link"], src.get("link_pattern") or r"$^")
         if test:
             new = items[:1]
         elif not seen:  # 처음 실행: 지금 있는 기사는 '이미 본 것'으로 기록만 하고 다음 새 기사부터 알림
