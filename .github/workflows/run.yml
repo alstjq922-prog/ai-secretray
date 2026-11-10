@@ -4,10 +4,15 @@ on:
   schedule:
     # 15분마다 실행 (GitHub 사정으로 몇 분~수십 분 밀릴 수 있음)
     - cron: "7,22,37,52 * * * *"
+    # 텔레그램 브리핑용: 각 시각 25분 전(한국 06:05·12:35·19:35)에 시작해 정시까지 기다렸다 보냄
+    # GitHub cron은 UTC 기준(한국 = UTC + 9시간)
+    - cron: "5 21 * * *"
+    - cron: "35 3 * * *"
+    - cron: "35 10 * * *"
   workflow_dispatch:
     inputs:
       only:
-        description: "특정 비서만 실행 (예: sns press). 비우면 주기가 된 비서만"
+        description: "특정 비서만 실행 (예: sns press). briefing = 텔레그램 브리핑 시험 전송. 비우면 주기가 된 비서만"
         required: false
         default: ""
 
@@ -23,7 +28,7 @@ concurrency:
 jobs:
   report:
     runs-on: ubuntu-latest
-    timeout-minutes: 20  # 여론 비서의 깊은 정리가 몇 분 걸릴 수 있음
+    timeout-minutes: 45  # 여론 정리 + 브리핑 정시까지 대기(최대 25분)
     environment:
       name: github-pages
     steps:
@@ -43,6 +48,8 @@ jobs:
           TELEGRAM_API_HASH: ${{ secrets.TELEGRAM_API_HASH }}
           TELEGRAM_SESSION: ${{ secrets.TELEGRAM_SESSION }}
           TELEGRAM_CHATS: ${{ secrets.TELEGRAM_CHATS }}
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_BOT_CHAT_ID: ${{ secrets.TELEGRAM_BOT_CHAT_ID }}
           DASHBOARD_PASSWORD: ${{ secrets.DASHBOARD_PASSWORD }}
           ONLY: ${{ github.event.inputs.only }}
         run: python -m secretary.main $ONLY

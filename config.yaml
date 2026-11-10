@@ -153,7 +153,7 @@ assembly:
 
 # ─────────────────────────────── 6. 여론·민원 비서
 opinion:
-  times: ["06:00", "13:00", "20:00"]   # 정리 시각(한국 시간). GitHub 사정으로 수십 분 늦을 수 있음
+  times: ["06:00", "12:30", "19:30"]   # 정리 시각(한국 시간). 텔레그램 브리핑 30분 전에 정리해 브리핑에 담음
   effort: medium             # 하루 3번만 하므로 더 꼼꼼하게(low | medium | high)
   posts_per_board: 60        # 커뮤니티별 인기글 수집 수
   cafe_display: 50           # 민원 검색어별 카페글 수집 수
@@ -170,3 +170,11 @@ opinion:
     민주당 비판 성향:
       - {name: 에펨코리아, url: "https://www.fmkorea.com/index.php?mid=politics", link_pattern: "/\\d{6,}"}
       - {name: 디시인사이드 정치, url: "https://gall.dcinside.com/mgallery/board/lists/?id=newpolitics", link_pattern: "id=newpolitics.*no=\\d+"}
+
+# ─────────────────────────────── 7. 텔레그램 브리핑
+# 정해진 시각에 지난 브리핑 이후 새 보고를 텔레그램 봇으로 보냅니다(README '7. 텔레그램 브리핑' 참고).
+# 시각을 바꾸면 .github/workflows/run.yml의 브리핑용 cron(각 시각 25분 전)도 함께 바꿔 주세요.
+briefing:
+  times: ["06:30", "13:00", "20:00"]   # 한국 시간
+  early_minutes: 25          # 이만큼 전에 실행이 시작되면 정시까지 기다렸다 보냄
+  per_section: 5             # 비서별로 보낼 최대 건수(나머지는 대시보드에서)

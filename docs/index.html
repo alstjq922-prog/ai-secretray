@@ -429,7 +429,7 @@ const VIEWS = {
   opinion() {
     const s = S("opinion"); const camps = s.camps || [], local = s.local || [];
     const ex = (xs) => (xs || []).length ? `<div class="ex">${xs.map((x) => `· ${link(x.title, x.link)} (${esc(x.source)})`).join("<br>")}</div>` : "";
-    const slot = s.slot ? `<div class="meta" style="margin:-4px 0 10px">${new Date(s.slot).getHours()}시 정리 · 하루 3번(06·13·20시)${s.counts ? ` · 커뮤니티 ${s.counts.posts}건, 카페 ${s.counts.local}건 분석` : ""}</div>` : "";
+    const slot = s.slot ? `<div class="meta" style="margin:-4px 0 10px">${new Date(s.slot).getHours()}시 정리 · 하루 3번 정리${s.counts ? ` · 커뮤니티 ${s.counts.posts}건, 카페 ${s.counts.local}건 분석` : ""}</div>` : "";
     return head("여론·민원 비서", "opinion") + slot +
       (s.brief ? `<div class="card hi"><h3>종합</h3><p>${esc(s.brief)}</p></div>` : "") +
       ((s.changes || []).length ? `<div class="card"><h3>지난 정리 대비 변화</h3><ul class="plain">${s.changes.map((x) => `<li>${esc(x)}</li>`).join("")}</ul></div>` : "") +
