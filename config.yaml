@@ -178,3 +178,14 @@ briefing:
   times: ["06:30", "13:00", "20:00"]   # 한국 시간
   early_minutes: 25          # 이만큼 전에 실행이 시작되면 정시까지 기다렸다 보냄
   per_section: 5             # 비서별로 보낼 최대 건수(나머지는 대시보드에서)
+
+# ─────────────────────────────── 8. 기사 알림 봇
+# 아래 언론사에 새 기사가 올라오면 제목·2~3문장 요약·링크를 텔레그램으로 바로 보냅니다(README '8. 기사 알림 봇').
+# RSS를 먼저 쓰고, 안 되면 기사 목록 페이지(list_url)에서 link_pattern에 맞는 링크를 기사로 봅니다.
+newswatch:
+  max_per_run: 10            # 한 번에 보낼 최대 기사 수(한꺼번에 많이 올라오면 나머지는 다음 실행 때)
+  sites:
+    - name: 화성투데이
+      rss: https://www.hstodays.com/rss/allArticle.xml
+      list_url: https://www.hstodays.com/news/articleList.html?view_type=sm
+      link_pattern: "articleView\\.html\\?idxno=\\d+"

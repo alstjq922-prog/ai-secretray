@@ -12,6 +12,7 @@
 | 국회·의회 | 상임위 통과 이상 법안 + 도·시의회 | 열린국회정보 + 네이버 뉴스 | 6시간 |
 | 여론·민원 | 진영별 커뮤니티 여론 + 화성 맘카페 민원 (종합·변화·전망 포함) | 커뮤니티 인기글 + 네이버 카페 | 하루 3번(06:00·12:30·19:30) |
 | 인간관계 | 상 1주 · 중 1달 · 하 3개월 연락 알림 | 내가 입력한 명단 | 화면에서 바로 계산 |
+| 기사 알림 | 화성투데이 새 기사 제목·요약·링크를 텔레그램으로 | 언론사 홈페이지 | 5분 |
 
 ---
 
@@ -122,6 +123,40 @@
 - 각 시각 25분 전에 미리 실행해 정시까지 기다렸다 보냅니다. GitHub 사정으로 실행이 더 늦으면 그만큼 늦게 옵니다.
 - 시각은 `config.yaml`의 `briefing.times`, 실행 시작 시각은 `.github/workflows/run.yml`의 브리핑용 cron에서 바꿉니다.
 - 봇 토큰이 유출되면 @BotFather에서 `/revoke`로 바로 바꾸세요.
+
+## 8. 기사 알림 봇 (화성투데이 새 기사 → 5분 안에 텔레그램)
+
+새 기사가 올라오면 **제목 · 2~3문장 요약 · 링크**를 보냅니다. 감시할 언론사는 `config.yaml`의 `newswatch.sites`에서 바꿉니다.
+
+### ① 알림 봇 만들기
+1. 텔레그램 **@BotFather**(파란 체크) → `/newbot` → 이름·아이디(`_bot`으로 끝) 입력 → **토큰** 복사
+2. BotFather 답장의 `t.me/...` 링크로 새 봇에 들어가 **시작** 누르기
+3. 저장소 비밀값 `NEWS_BOT_TOKEN` = 토큰
+4. Actions > **기사 알림** > Run workflow 에 `test` 입력 → 최근 기사 1건이 오면 성공
+
+### ② 5분마다 실행되게 하기 (무료 외부 서비스)
+GitHub 자체 예약 실행은 1시간 넘게 밀리는 일이 많아, cron-job.org가 5분마다 깨우게 합니다.
+
+**GitHub 토큰 만들기**
+1. GitHub 오른쪽 위 프로필 → **Settings > Developer settings > Personal access tokens > Fine-grained tokens > Generate new token**
+2. 이름: `cron-job`, Expiration: 1년(만료 전에 다시 만들어 교체)
+3. Repository access: **Only select repositories** → `ai-secretray`
+4. Permissions > Repository permissions > **Actions: Read and write** (다른 것은 건드리지 않음) → 생성 후 토큰 복사
+
+**cron-job.org 설정**
+1. https://cron-job.org 가입 → **CREATE CRONJOB**
+2. URL: `https://api.github.com/repos/<내 아이디>/ai-secretray/actions/workflows/newswatch.yml/dispatches`
+3. Execution schedule: **Every 5 minutes**
+4. **ADVANCED** 탭
+   - Request method: **POST**
+   - Headers 추가: `Authorization` = `Bearer <위 토큰>` / `Accept` = `application/vnd.github+json`
+   - Request body: `{"ref":"main"}`
+5. **TEST RUN** → 응답 `204`면 성공 → 저장
+
+**참고**
+- 처음 실행 때는 이미 올라와 있는 기사는 기록만 하고, 그다음 새 기사부터 알립니다.
+- 사이트를 못 읽게 되면 텔레그램으로 한 번 알리고, 회복되면 다시 알립니다.
+- 위 토큰은 이 저장소의 Actions 실행만 할 수 있습니다. 유출되면 GitHub에서 토큰을 삭제하세요.
 
 ---
 
