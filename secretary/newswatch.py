@@ -367,9 +367,10 @@ def _run(state, test):
         sent_any = True
         print(f"  {site['name']}: {len(new)}건 알림 전송")
         state["seen"][site["name"]] = seen[-500:]
-    # 수집 실패는 5분마다 오류로 끝내지 않고(실패 메일 폭주 방지), 실패가 시작될 때·회복될 때 한 번씩만 텔레그램으로 알림
+    # 수집 실패는 5분마다 오류로 끝내지 않음(실패 메일 폭주 방지). 실행 기록에만 남기고,
+    # status_alerts: true일 때만 실패가 시작될 때·회복될 때 한 번씩 텔레그램으로 알림(기본은 보내지 않음)
     failing = bool(problems) and not sent_any
-    if failing != bool(state.get("failing")) and not test:
+    if failing != bool(state.get("failing")) and not test and cfg.get("status_alerts", False):
         try:
             msg = ("⚠️ 기사 알림: 사이트를 읽지 못하고 있어요. 회복되면 다시 알려 드릴게요.\n" + "\n".join(problems))[:1000] \
                 if failing else "✅ 기사 알림: 사이트 확인이 다시 정상입니다."
